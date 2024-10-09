@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'login_page.dart'; // Make sure you create or link to the Login Page
+import 'login_page.dart'; // Import the Login Page
+import 'menu_page.dart'; // Import the Menu Page
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Import flutter_secure_storage
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -10,17 +12,36 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  // Initialize FlutterSecureStorage
+  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+
   @override
   void initState() {
     super.initState();
+    _navigateBasedOnAuth();
+  }
 
-    // Navigate to Login Page after 3 seconds
-    Timer(const Duration(seconds: 3), () {
+  // Function to check token and navigate accordingly
+  void _navigateBasedOnAuth() async {
+    // Wait for 3 seconds to show the splash screen
+    await Future.delayed(const Duration(seconds: 3));
+
+    // Read the JWT token from secure storage
+    String? token = await _secureStorage.read(key: 'jwt_token');
+
+    if (token != null) {
+      // Token exists, navigate to MenuPage
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => MenuPage()),
+      );
+    } else {
+      // No token found, navigate to LoginPage
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => LoginPage()),
       );
-    });
+    }
   }
 
   @override

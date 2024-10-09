@@ -3,6 +3,9 @@ import 'forgot_password_page.dart';
 import 'signup_page.dart';
 import 'menu_page.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class LoginPage extends StatefulWidget {
   @override
@@ -15,38 +18,116 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isPasswordVisible = false; // For toggling password visibility
+  final FlutterSecureStorage _secureStorage =
+      FlutterSecureStorage(); // Initialize secure storage
 
-  String dummyEmail = "bpanda272@gmail.com";
-  String dummyPassword = "123";
-
-  // Dummy login function
-  void _login() {
+  // Login function using API
+  void _login() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
       });
 
-      // Simulate login delay
-      Future.delayed(Duration(seconds: 2), () {
+      var headers = {'Content-Type': 'application/json'};
+      var url = Uri.parse('https://www.backend.amddas.net/login');
+      var body = json.encode({
+        "email": _emailController.text.trim(),
+        "password": _passwordController.text.trim()
+      });
+
+      try {
+        final response = await http.put(
+          url,
+          headers: headers,
+          body: body,
+        );
+
+        // Debug: print response
+        print('Response status: ${response.statusCode}');
+        print('Response body: ${response.body}');
+
+        // Check if response is JSON
+        bool isJson = false;
+        try {
+          final contentType = response.headers['content-type'];
+          if (contentType != null && contentType.contains('application/json')) {
+            isJson = true;
+          }
+        } catch (e) {
+          isJson = false;
+        }
+
+        if (response.statusCode == 200) {
+          // Login successful
+          if (isJson) {
+            var responseData = json.decode(response.body);
+            // Assuming the JWT token is in responseData['token']
+            String token = responseData['token'];
+
+            // Store the token securely
+            await _secureStorage.write(key: 'jwt_token', value: token);
+
+            print('Login successful: $responseData');
+          } else {
+            print('Login successful: ${response.body}');
+          }
+
+          // Navigate to MenuPage
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => MenuPage()),
+          );
+        } else {
+          // Login failed
+          var errorMessage = 'Invalid email or password';
+
+          if (isJson) {
+            try {
+              var errorData = json.decode(response.body);
+              if (errorData['message'] != null) {
+                errorMessage = errorData['message'];
+              }
+            } catch (e) {
+              // Error decoding JSON
+              errorMessage = response.body;
+            }
+          } else {
+            errorMessage =
+                response.body.isNotEmpty ? response.body : errorMessage;
+          }
+
+          // Show error message
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(errorMessage)));
+        }
+      } catch (e) {
+        print('Error: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('An error occurred. Please try again.')));
+      } finally {
         setState(() {
           _isLoading = false;
         });
-
-        // Check if credentials match the dummy credentials
-        if (_emailController.text == dummyEmail &&
-            _passwordController.text == dummyPassword) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-                builder: (context) => MenuPage()), // Redirect to Home Page
-          );
-        } else {
-          // Show error if login fails
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Invalid email or password')));
-        }
-      });
+      }
     }
+  }
+
+  // Logout function (if you want to implement it here)
+  Future<void> _logout() async {
+    await _secureStorage.delete(key: 'jwt_token');
+    // Navigate to LoginPage
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => LoginPage()),
+    );
+  }
+
+  @override
+  void dispose() {
+    // Dispose controllers
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -54,7 +135,7 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       backgroundColor: Colors.white, // Set the background color to white
       appBar: AppBar(
-        title: Text('AMDDAS Foods - Login',
+        title: Text('Amddas Foods',
             style: GoogleFonts.pacifico(color: Colors.white)),
         centerTitle: true,
         backgroundColor:
@@ -96,6 +177,9 @@ class _LoginPageState extends State<LoginPage> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your email';
                       }
+                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                        return 'Please enter a valid email address';
+                      }
                       return null;
                     },
                   ),
@@ -119,7 +203,7 @@ class _LoginPageState extends State<LoginPage> {
                               ? Icons.visibility
                               : Icons.visibility_off,
                         ),
-                        color: Colors.black, // Set icon color to orange
+                        color: Colors.black, // Set icon color to black
                         onPressed: () {
                           setState(() {
                             _isPasswordVisible =
@@ -159,7 +243,7 @@ class _LoginPageState extends State<LoginPage> {
                   _isLoading
                       ? CircularProgressIndicator()
                       : ElevatedButton(
-                          onPressed: _login,
+                          onPressed: _isLoading ? null : _login,
                           child: Text(
                             'Login',
                             style: TextStyle(

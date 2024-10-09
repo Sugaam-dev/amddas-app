@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'forgot_password_otp_page.dart'; // Import for OTP page navigation
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class ForgotPasswordPage extends StatefulWidget {
   @override
@@ -12,28 +14,86 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
-  // Simulate sending the OTP to email
-  void _sendOTP() {
+  // Send OTP to email using API
+  void _sendOTP() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
       });
 
-      // Simulate a delay for sending the OTP
-      Future.delayed(Duration(seconds: 2), () {
+      String email = _emailController.text.trim();
+      String url = 'https://www.backend.amddas.net/auth/forgot-password';
+      var headers = {'Content-Type': 'application/json'};
+      var body = json.encode({'email': email});
+
+      try {
+        final response = await http.post(
+          Uri.parse(url),
+          headers: headers,
+          body: body,
+        );
+
+        print('Response status: ${response.statusCode}');
+        print('Response body: ${response.body}');
+
+        // Check if response is JSON
+        bool isJson = false;
+        try {
+          final contentType = response.headers['content-type'];
+          if (contentType != null && contentType.contains('application/json')) {
+            isJson = true;
+          }
+        } catch (e) {
+          isJson = false;
+        }
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          // OTP sent successfully
+          if (isJson) {
+            var responseData = json.decode(response.body);
+            print('OTP sent successfully: $responseData');
+          } else {
+            print('OTP sent successfully: ${response.body}');
+          }
+
+          // Navigate to the Forgot Password OTP Page, passing the email
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => ForgotPasswordOTPPage(
+                    email: email)), // Redirect to OTP Page
+          );
+        } else {
+          // Handle error response
+          String errorMessage = 'Failed to send OTP. Please try again.';
+          if (isJson) {
+            var errorData = json.decode(response.body);
+            errorMessage = errorData['message'] ?? errorMessage;
+          } else {
+            errorMessage =
+                response.body.isNotEmpty ? response.body : errorMessage;
+          }
+          // Show error message
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(errorMessage)));
+        }
+      } catch (e) {
+        print('Error: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('An error occurred. Please try again.')));
+      } finally {
         setState(() {
           _isLoading = false;
         });
-
-        // Navigate to the Forgot Password OTP Page
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  ForgotPasswordOTPPage()), // Redirect to OTP Page
-        );
-      });
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    // Dispose controllers
+    _emailController.dispose();
+    super.dispose();
   }
 
   @override
@@ -44,8 +104,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         title: Text('Forgot Password',
             style: GoogleFonts.pacifico(color: Colors.white)),
         centerTitle: true,
-        backgroundColor: Color(
-            0xFFEA4335), // Set the AppBar background color to Pumpkin #FC8019
+        backgroundColor:
+            Color(0xFFEA4335), // Set the AppBar background color to orange
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -83,6 +143,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your email';
                       }
+                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                        return 'Please enter a valid email address';
+                      }
                       return null;
                     },
                   ),
@@ -92,7 +155,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   _isLoading
                       ? CircularProgressIndicator()
                       : ElevatedButton(
-                          onPressed: _sendOTP,
+                          onPressed: _isLoading ? null : _sendOTP,
                           child: Text(
                             'Send OTP',
                             style: TextStyle(
@@ -100,7 +163,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Color(
-                                0xFFEA4335), // Set background color to Pumpkin #FC8019
+                                0xFFEA4335), // Set background color to orange
                             padding: EdgeInsets.symmetric(
                                 horizontal: 80, vertical: 15),
                             shape: RoundedRectangleBorder(

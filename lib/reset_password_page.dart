@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 import 'login_page.dart'; // Import the login page to redirect after confirmation
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http; // Import http package
+import 'dart:convert'; // For JSON encoding and decoding
 
 class ResetPasswordPage extends StatefulWidget {
+  final String email; // Accept the email as a parameter
+  final String otp; // Accept the OTP as a parameter
+
+  ResetPasswordPage({required this.email, required this.otp});
+
   @override
   _ResetPasswordPageState createState() => _ResetPasswordPageState();
 }
@@ -34,29 +41,98 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     return null;
   }
 
-  // Function to simulate resetting the password
-  void _resetPassword() {
+  // Function to reset the password using the API
+  void _resetPassword() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
       });
 
-      // Simulate a delay for resetting the password
-      Future.delayed(Duration(seconds: 2), () {
+      String email = widget.email;
+      String otp = widget.otp;
+      String password = _passwordController.text.trim();
+
+      // Prepare data for the API request
+      var data = json.encode({
+        'email': email,
+        'otp': otp,
+        'newPassword': password,
+      });
+
+      // API URL
+      String url = 'https://www.backend.amddas.net/auth/reset-password';
+
+      try {
+        var headers = {'Content-Type': 'application/json'};
+
+        final response = await http.post(
+          Uri.parse(url),
+          headers: headers,
+          body: data,
+        );
+
+        print('Response status: ${response.statusCode}');
+        print('Response body: ${response.body}');
+
+        // Check if response is JSON
+        bool isJson = false;
+        try {
+          final contentType = response.headers['content-type'];
+          if (contentType != null && contentType.contains('application/json')) {
+            isJson = true;
+          }
+        } catch (e) {
+          isJson = false;
+        }
+
+        if (response.statusCode == 200) {
+          // Password reset successful
+          setState(() {
+            _isLoading = false;
+            _isPasswordReset = true; // Mark the password as reset
+          });
+
+          // Automatically redirect to Login Page after 3 seconds
+          Future.delayed(Duration(seconds: 3), () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => LoginPage()),
+            );
+          });
+        } else {
+          // Handle error response
+          String errorMessage = 'Failed to reset password. Please try again.';
+          if (isJson) {
+            var errorData = json.decode(response.body);
+            errorMessage = errorData['message'] ?? errorMessage;
+          } else {
+            errorMessage =
+                response.body.isNotEmpty ? response.body : errorMessage;
+          }
+          // Show error message
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(errorMessage)));
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        print('Error: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('An error occurred. Please try again.')));
         setState(() {
           _isLoading = false;
-          _isPasswordReset = true; // Mark the password as reset
         });
-
-        // Automatically redirect to Login Page after 3 seconds
-        Future.delayed(Duration(seconds: 3), () {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => LoginPage()),
-          );
-        });
-      });
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    // Dispose controllers
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
   }
 
   @override

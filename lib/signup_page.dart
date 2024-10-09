@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'otp_page.dart'; // Import for OTP Page navigation
 import 'package:url_launcher/url_launcher.dart'; // For launching the privacy policy URL
 import 'login_page.dart';
-import 'package:google_fonts/google_fonts.dart'; // for google fonts
+import 'package:google_fonts/google_fonts.dart'; // for Google Fonts
+import 'package:http/http.dart' as http; // Import the http package
+import 'dart:convert'; // For JSON encoding and decoding
 
 class SignUpPage extends StatefulWidget {
   @override
@@ -18,6 +20,7 @@ class _SignUpPageState extends State<SignUpPage> {
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isAgreeToPrivacy = false;
+  bool _isLoading = false; // Loading state
 
   // Password validation
   String? _validatePassword(String? value) {
@@ -45,7 +48,113 @@ class _SignUpPageState extends State<SignUpPage> {
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
-      throw 'Could not launch $url';
+      // Show error if URL can't be launched
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not launch Privacy Policy')),
+      );
+    }
+  }
+
+  // Registration API Call
+  Future<void> _registerUser() async {
+    if (!_formKey.currentState!.validate()) {
+      // If form is not valid, do not proceed
+      return;
+    }
+
+    if (!_isAgreeToPrivacy) {
+      // If user hasn't agreed to privacy policy, do not proceed
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You must agree to the Privacy Policy')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true; // Start loading
+    });
+
+    var headers = {
+      'Content-Type': 'application/json',
+      // Add any other required headers here
+    };
+    var url = Uri.parse('https://www.backend.amddas.net/register');
+    var body = json.encode({
+      "name": _nameController.text.trim(),
+      "email": _emailController.text.trim(),
+      "password": _passwordController.text.trim()
+    });
+
+    try {
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: body,
+      );
+
+      // Debug: Print response status and body
+      print('Response Status: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+
+      // Check if response is JSON
+      bool isJson = false;
+      try {
+        final contentType = response.headers['content-type'];
+        if (contentType != null && contentType.contains('application/json')) {
+          isJson = true;
+        }
+      } catch (e) {
+        // If checking content-type fails, assume it's not JSON
+        isJson = false;
+      }
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Handle successful registration
+        String email = _emailController.text.trim();
+
+        if (isJson) {
+          var responseData = json.decode(response.body);
+          // You can process responseData as needed
+          print('Registration Successful: $responseData');
+        } else {
+          // If response is not JSON, handle accordingly
+          print('Registration Successful: ${response.body}');
+        }
+
+        // Navigate to OTP Page and pass the email
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => OTPPage(email: email)), // Pass email
+        );
+      } else {
+        // Handle different status codes accordingly
+        String errorMessage = 'Registration failed. Please try again.';
+        if (isJson) {
+          var errorData = json.decode(response.body);
+          // Adjust based on your API's error response structure
+          errorMessage = errorData['message'] ?? errorMessage;
+        } else {
+          // If response is not JSON, use the raw response body
+          errorMessage =
+              response.body.isNotEmpty ? response.body : errorMessage;
+        }
+
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage)),
+        );
+      }
+    } catch (e) {
+      // Handle any exceptions, such as network errors
+      print('Error during registration: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('An error occurred. Please try again.')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false; // Stop loading
+      });
     }
   }
 
@@ -71,7 +180,7 @@ class _SignUpPageState extends State<SignUpPage> {
               children: <Widget>[
                 // GIF Image
                 Image.asset(
-                  'gif/signup.gif', // Update with your correct path
+                  'gif/signup.gif', // Ensure this path is correct
                   height: 150,
                 ),
                 SizedBox(height: 20.0),
@@ -111,6 +220,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           color: Color(0xFFFC8019), width: 2), // Pumpkin color
                     ),
                   ),
+                  keyboardType: TextInputType.emailAddress,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your email';
@@ -234,18 +344,18 @@ class _SignUpPageState extends State<SignUpPage> {
 
                 // Signup Button
                 ElevatedButton(
-                  onPressed: _isAgreeToPrivacy
-                      ? () {
-                          if (_formKey.currentState!.validate()) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => OTPPage()),
-                            );
-                          }
-                        }
-                      : null,
-                  child: Text('Sign Up', style: TextStyle(color: Colors.white)),
+                  onPressed:
+                      _isAgreeToPrivacy && !_isLoading ? _registerUser : null,
+                  child: _isLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.0,
+                          ),
+                        )
+                      : Text('Sign Up', style: TextStyle(color: Colors.white)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
                         _isAgreeToPrivacy ? Color(0xFFEA4335) : Colors.grey,
@@ -280,5 +390,15 @@ class _SignUpPageState extends State<SignUpPage> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    // Dispose controllers when not needed
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
   }
 }

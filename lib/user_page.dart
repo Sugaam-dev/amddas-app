@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'menu_page.dart'; // For Menu Page navigation
 import 'login_page.dart'; // For Logout navigation
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Import flutter_secure_storage
 
 class UserPage extends StatefulWidget {
   @override
@@ -9,6 +10,8 @@ class UserPage extends StatefulWidget {
 }
 
 class _UserPageState extends State<UserPage> {
+  final FlutterSecureStorage _secureStorage =
+      FlutterSecureStorage(); // Initialize secure storage
   int _currentIndex = 1; // User page is the active tab
   String userEmail =
       "user@borgwarner.com"; // Placeholder for now; can be replaced with dynamic data
@@ -60,12 +63,7 @@ class _UserPageState extends State<UserPage> {
               title: Text('Logout',
                   style: TextStyle(color: Colors.black, fontSize: 16)),
               onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) =>
-                          LoginPage()), // Navigate to Login Page (Logout)
-                );
+                _logout(); // Call the logout function
               },
             ),
             Divider(), // Divider below Logout
@@ -114,6 +112,22 @@ class _UserPageState extends State<UserPage> {
           type: BottomNavigationBarType.fixed,
         ),
       ),
+    );
+  }
+
+  // Logout Function
+  Future<void> _logout() async {
+    // Delete the JWT token from secure storage
+    await _secureStorage.delete(key: 'jwt_token');
+
+    // Optionally, delete other stored user data if any
+    // await _secureStorage.deleteAll();
+
+    // Navigate to the LoginPage and remove all previous routes
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => LoginPage()),
+      (Route<dynamic> route) => false, // Remove all routes
     );
   }
 

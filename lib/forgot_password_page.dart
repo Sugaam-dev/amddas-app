@@ -101,11 +101,14 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     return Scaffold(
       backgroundColor: Colors.white, // Set the background color to white
       appBar: AppBar(
-        title: Text('Forgot Password',
-            style: GoogleFonts.pacifico(color: Colors.white)),
+        title: Text(
+          'Forgot Password',
+          style: GoogleFonts.josefinSans(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32),
+        ),
         centerTitle: true,
-        backgroundColor:
-            Color(0xFFEA4335), // Set the AppBar background color to orange
+        backgroundColor: Color.fromARGB(
+            255, 41, 110, 61), // Set the AppBar background color to orange
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -162,8 +165,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                                 color: Colors.white), // White text on button
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(
-                                0xFFEA4335), // Set background color to orange
+                            backgroundColor: Color.fromARGB(255, 41, 110,
+                                61), // Set background color to orange
                             padding: EdgeInsets.symmetric(
                                 horizontal: 80, vertical: 15),
                             shape: RoundedRectangleBorder(

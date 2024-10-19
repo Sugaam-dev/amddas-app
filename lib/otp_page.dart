@@ -3,6 +3,7 @@ import 'login_page.dart'; // Import login page for redirecting after successful 
 import 'package:http/http.dart' as http; // Import the http package
 import 'dart:convert'; // For JSON encoding and decoding
 import 'dart:async'; // For Timer
+import 'package:google_fonts/google_fonts.dart';
 
 class OTPPage extends StatefulWidget {
   final String email; // Email passed from SignUpPage
@@ -233,11 +234,16 @@ class _OTPPageState extends State<OTPPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white, // Set the background color to white
       appBar: AppBar(
-        title: Text('Verify OTP'),
+        title: Text(
+          'Verify OTP',
+          style: GoogleFonts.josefinSans(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32),
+        ),
         centerTitle: true,
-        backgroundColor:
-            Color(0xFFEA4335), // Pumpkin color to maintain consistency
+        backgroundColor: Color.fromARGB(
+            255, 41, 110, 61), // Pumpkin color to maintain consistency
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -289,6 +295,18 @@ class _OTPPageState extends State<OTPPage> {
               ),
               SizedBox(height: 20.0),
 
+              // Add this line to display the message
+              Text(
+                "Can't locate the code? Please check your spam folder or request a new code.",
+                style: TextStyle(
+                  color: Colors.black, // Set text color to grey
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              SizedBox(height: 20.0),
+
               // Resend OTP Button
               TextButton(
                 onPressed: _isResendButtonEnabled ? _resendOTP : null,
@@ -314,7 +332,8 @@ class _OTPPageState extends State<OTPPage> {
                         style: TextStyle(color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFFEA4335), // Pumpkin color
+                        backgroundColor:
+                            Color.fromARGB(255, 41, 110, 61), // Pumpkin color
                         padding:
                             EdgeInsets.symmetric(horizontal: 80, vertical: 15),
                         shape: RoundedRectangleBorder(

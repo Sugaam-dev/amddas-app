@@ -4,10 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-// Removed 'jwt_decoder' package import
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart'; // Updated Date Picker
 
-import 'user_page.dart'; // Import for User Page navigation
-import 'login_page.dart'; // Import for Login Page navigation
+import 'user_page.dart'; // Navigation to User Page
+import 'login_page.dart'; // Navigation to Login Page
 
 class MenuPage extends StatefulWidget {
   @override
@@ -27,14 +28,15 @@ class _MenuPageState extends State<MenuPage>
   String? _orderResponse;
   String? _error;
   bool _isSunday = false;
-  bool _isTuesday = false;
+  bool _isTokenGenerated = false;
+
+  bool _isWednesday = false; // New state variable for Wednesday
   String? _selectedMenuId;
-  int? _quantity;
   String? _orderId;
   Map<String, dynamic>? _orderDetails;
-  bool _isOrderDetailsLoading = false;
   bool _isLoading = false;
-  bool _isTokenGenerated = false;
+  List<dynamic> _tokens = []; // List of tokens for the carousel
+  DateTime? _selectedDate; // Updated to DateTime type
 
   // Animation Controller for vibration effect
   late AnimationController _controller;
@@ -46,10 +48,7 @@ class _MenuPageState extends State<MenuPage>
   // JWT Token, User ID, and Email
   String? _jwtToken;
   String? _userId;
-  String? _email; // Added to store the email
-
-  // Dropdown for Menu Types
-  String? _selectedMenuType;
+  String? _email;
 
   // Initialization flag
   bool _isInitialized = false;
@@ -58,8 +57,6 @@ class _MenuPageState extends State<MenuPage>
   void initState() {
     super.initState();
     _initializeAnimation();
-
-    // Chain initialization methods
     _initializeMenu().then((_) {
       _initializeOrder().then((_) {
         setState(() {
@@ -78,7 +75,7 @@ class _MenuPageState extends State<MenuPage>
   // Initialize Animation Controller
   void _initializeAnimation() {
     _controller = AnimationController(
-      duration: const Duration(seconds: 1), // Quick vibration
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     )..repeat(reverse: true);
     _animation = Tween<double>(begin: -5, end: 5).animate(_controller);
@@ -86,163 +83,49 @@ class _MenuPageState extends State<MenuPage>
 
   // Initialize Menu and Booking Day
   Future<void> _initializeMenu() async {
-    // Retrieve JWT Token from Secure Storage
     String? token = await _secureStorage.read(key: 'jwt_token');
-    if (token != null) {
+    String? email = await _secureStorage.read(key: 'user_email');
+    String? userId = await _secureStorage.read(key: 'user_id');
+
+    if (token != null && email != null && userId != null) {
       setState(() {
         _jwtToken = token;
+        _email = email;
+        _userId = userId;
       });
-      _decodeJwt(token);
+
+      print('Retrieved JWT Token: $_jwtToken');
+      print('Retrieved Email: $_email');
+      print('Retrieved User ID: $_userId');
+
       _determineBookingDay();
       await _fetchMenuData();
     } else {
-      setState(() {
-        _error = 'Authentication token is missing.';
-      });
-    }
-  }
+      String missingData = '';
+      if (token == null) missingData += 'JWT Token, ';
+      if (email == null) missingData += 'Email, ';
+      if (userId == null) missingData += 'User ID, ';
 
-  // **Manual JWT Decoding**
-  void _decodeJwt(String token) {
-    try {
-      Map<String, dynamic> decodedToken = _parseJwt(token);
-      print('Decoded JWT: $decodedToken');
-
-      setState(() {
-        // Adjust these keys based on your token's payload
-        _userId = decodedToken['userId']?.toString();
-        _email =
-            decodedToken['email']?.toString(); // Use the correct key for email
-        print('User ID: $_userId');
-        print('Email: $_email');
-      });
-    } catch (e) {
-      setState(() {
-        _error = 'Invalid authentication token.';
-      });
-      print('Error decoding JWT: $e');
-    }
-  }
-
-  // **Helper Function to Manually Decode JWT**
-  Map<String, dynamic> _parseJwt(String token) {
-    final parts = token.split('.');
-    if (parts.length != 3) {
-      throw Exception('Invalid token');
-    }
-
-    final payload = _decodeBase64(parts[1]);
-    final payloadMap = json.decode(payload);
-    if (payloadMap is! Map<String, dynamic>) {
-      throw Exception('Invalid payload');
-    }
-
-    return payloadMap;
-  }
-
-  String _decodeBase64(String str) {
-    String output = str.replaceAll('-', '+').replaceAll('_', '/');
-
-    switch (output.length % 4) {
-      case 0:
-        break; // No padding needed
-      case 2:
-        output += '=='; // Two padding chars
-        break;
-      case 3:
-        output += '='; // One padding char
-        break;
-      default:
-        throw Exception('Illegal base64url string!');
-    }
-
-    return utf8.decode(base64Url.decode(output));
-  }
-
-  // Determine Booking Day
-  void _determineBookingDay() {
-    final DateTime today = DateTime.now();
-    final int currentDay = today.weekday; // 1 = Monday, 7 = Sunday
-    DateTime bookedDayDate;
-
-    if (currentDay >= 1 && currentDay <= 4) {
-      // Monday to Thursday: Book for the next day
-      bookedDayDate = today.add(Duration(days: 1));
-    } else if (currentDay == 5 || currentDay == 6) {
-      // Friday or Saturday: Book for Monday
-      int daysToAdd = 8 - currentDay; // Friday +3, Saturday +2
-      bookedDayDate = today.add(Duration(days: daysToAdd));
-    } else {
-      // Sunday: Book for Monday
-      bookedDayDate = today.add(Duration(days: 1));
-    }
-
-    String bookedDayName = DateFormat('EEEE').format(bookedDayDate);
-
-    setState(() {
-      _bookingDay = bookedDayName;
-      _isSunday = today.weekday == DateTime.sunday;
-      _isTuesday = today.weekday == DateTime.tuesday;
-    });
-  }
-
-  // Fetch Menu Data from API
-  Future<void> _fetchMenuData() async {
-    if (_jwtToken == null || _bookingDay.isEmpty) return;
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    final String apiUrl =
-        'https://www.backend.amddas.net/api/menus/menu/$_bookingDay';
-
-    try {
-      final response = await http.get(
-        Uri.parse(apiUrl),
-        headers: {
-          'Authorization': 'Bearer $_jwtToken',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        List<dynamic> data = json.decode(response.body);
-        setState(() {
-          _menuData = data;
-          _filterItems('Veg'); // Apply default filter
-          _error = null;
-        });
-      } else if (response.statusCode == 403) {
-        setState(() {
-          _error = 'Session expired. Please log in again.';
-        });
-        // Navigate to LoginPage if session expired
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => LoginPage()),
-        );
-      } else {
-        setState(() {
-          _error = 'Failed to fetch menu data. Please try again.';
-        });
+      if (missingData.isNotEmpty) {
+        missingData = missingData.substring(0, missingData.length - 2);
       }
-    } catch (e) {
+
       setState(() {
-        _error = 'An error occurred while fetching menu data.';
+        _error = 'Missing required data: $missingData.';
       });
-      print('Error fetching menu data: $e');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+
+      print('Error: Missing required data: $missingData');
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginPage()),
+      );
     }
   }
 
   // Initialize Order (Fetch Latest Order ID and Details)
   Future<void> _initializeOrder() async {
     if (_jwtToken == null || _userId == null) return;
-
     await _fetchLatestOrderId();
   }
 
@@ -288,13 +171,13 @@ class _MenuPageState extends State<MenuPage>
     }
   }
 
-  // Fetch Order Details
+  // Fetch Order Details using orderId
   Future<void> _fetchOrderDetails(String orderId) async {
     final String apiUrl =
-        'https://www.backend.amddas.net/api/order-details/$orderId';
+        'https://www.backend.amddas.net/api/order-details/user?userId=$_userId';
 
     setState(() {
-      _isOrderDetailsLoading = true;
+      _isLoading = true;
     });
 
     try {
@@ -307,17 +190,23 @@ class _MenuPageState extends State<MenuPage>
       );
 
       if (response.statusCode == 200) {
-        Map<String, dynamic> data = json.decode(response.body);
-        String menuId = data['menuId'].toString();
-        String menuType = _getMenuTypeFromMenuId(menuId);
+        List<dynamic> data = json.decode(response.body);
+        List<dynamic> activeTokens =
+            data.where((detail) => detail['isActive'] == 1).toList();
+
+        List<dynamic> formattedTokens = activeTokens.map((detail) {
+          return {
+            'token': detail['token'],
+            'validFor': _formatDate(detail['deliveryDate']),
+          };
+        }).toList();
 
         setState(() {
-          _orderDetails = data;
-          _orderDetails?['menuType'] = menuType;
-          _tokenn = data['token']?.toString();
-          _formattedDate = _formatDate(data['dateTimeToken']);
-          _quantity = data['quantity'] ?? 1;
+          _orderDetails = data.isNotEmpty ? data[0] : null;
+          _tokenn = _orderDetails?['token']?.toString();
+          _formattedDate = _formatDate(_orderDetails?['deliveryDate']);
           _error = null;
+          _tokens = formattedTokens;
         });
       } else if (response.statusCode == 403) {
         setState(() {
@@ -339,32 +228,9 @@ class _MenuPageState extends State<MenuPage>
       print('Error fetching order details: $e');
     } finally {
       setState(() {
-        _isOrderDetailsLoading = false;
+        _isLoading = false;
       });
     }
-  }
-
-  // Helper: Map menuId to menuType
-  String _getMenuTypeFromMenuId(String menuId) {
-    // Define the menu mapping based on the booking day
-    Map<String, Map<String, dynamic>> menuDataMap = {
-      'Monday': {'veg': '1'},
-      'Tuesday': {'veg': '2'},
-      'Wednesday': {'veg': '3', 'nonVeg': '4', 'egg': '5'},
-      'Thursday': {'veg': '6'},
-      'Friday': {'veg': '7'},
-      // Add more mappings if needed
-    };
-
-    for (var day in menuDataMap.keys) {
-      for (var type in menuDataMap[day]!.keys) {
-        if (menuDataMap[day]![type] == menuId) {
-          return type;
-        }
-      }
-    }
-
-    return 'Unknown';
   }
 
   // Helper: Format Date
@@ -378,16 +244,6 @@ class _MenuPageState extends State<MenuPage>
       return 'Invalid Date';
     }
 
-    int day = date.weekday; // 1 = Monday, 7 = Sunday
-
-    if (day == DateTime.friday) {
-      date = date.add(Duration(days: 3)); // Next Monday
-    } else if (day == DateTime.saturday) {
-      date = date.add(Duration(days: 2)); // Next Monday
-    } else {
-      date = date.add(Duration(days: 1)); // Next day
-    }
-
     return DateFormat('yyyy-MM-dd').format(date);
   }
 
@@ -397,38 +253,231 @@ class _MenuPageState extends State<MenuPage>
       _activeFilter = category;
     });
 
-    if (_menuData.isEmpty) return;
+    if (_menuData.isEmpty) {
+      print('Menu data is empty.');
+      setState(() {
+        _error = 'No menu data available.';
+        _filteredItems = [];
+        _selectedMenuId = null;
+      });
+      return;
+    }
+
+    print('Filtering items for category: $category');
+    print('Menu Data: $_menuData');
 
     List<dynamic> filtered = [];
     String? menuId;
 
-    if (category == 'Veg') {
-      var vegMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 1,
-          orElse: () => null);
-      if (vegMenu != null) {
-        filtered = vegMenu['menuItems'];
-        menuId = vegMenu['menuId'].toString();
+    try {
+      if (category == 'Veg') {
+        var vegMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 1,
+            orElse: () => null);
+        if (vegMenu != null) {
+          filtered = vegMenu['menuItems'];
+          menuId = vegMenu['menuId'].toString();
+        }
+      } else if (category == 'Egg') {
+        var eggMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 2,
+            orElse: () => null);
+        if (eggMenu != null) {
+          filtered = eggMenu['menuItems'];
+          menuId = eggMenu['menuId'].toString();
+        }
+      } else if (category == 'Non-Veg') {
+        var nonVegMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 0,
+            orElse: () => null);
+        if (nonVegMenu != null) {
+          filtered = nonVegMenu['menuItems'];
+          menuId = nonVegMenu['menuId'].toString();
+        }
       }
-    } else if (category == 'Egg') {
-      var eggMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 2,
-          orElse: () => null);
-      if (eggMenu != null) {
-        filtered = eggMenu['menuItems'];
-        menuId = eggMenu['menuId'].toString();
+
+      if (filtered.isEmpty) {
+        setState(() {
+          _error = 'No items found for $category on $_bookingDay.';
+          _filteredItems = [];
+          _selectedMenuId = null;
+        });
+      } else {
+        setState(() {
+          _filteredItems = filtered;
+          _selectedMenuId = menuId;
+          _error = null;
+        });
       }
-    } else if (category == 'Non-Veg') {
-      var nonVegMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 0,
-          orElse: () => null);
-      if (nonVegMenu != null) {
-        filtered = nonVegMenu['menuItems'];
-        menuId = nonVegMenu['menuId'].toString();
-      }
+
+      // Debug Statements
+      print('Filtered Items: $filtered');
+      print('Selected Menu ID: $menuId');
+    } catch (e) {
+      setState(() {
+        _error = 'An error occurred while filtering menu items.';
+        _filteredItems = [];
+        _selectedMenuId = null;
+      });
+      print('Error in _filterItems: $e');
+    }
+  }
+
+  // Handle Date Selection using Date Picker Plus
+  void _selectDate() {
+    DatePicker.showDatePicker(
+      context,
+      showTitleActions: true,
+      onConfirm: (date) {
+        setState(() {
+          _selectedDate = date;
+          _bookingDay = DateFormat('EEEE').format(date);
+          _isSunday = date.weekday == DateTime.sunday;
+
+          _isWednesday = date.weekday == DateTime.wednesday; // Set Wednesday
+          _error = null;
+        });
+        _fetchMenuData(date: date);
+
+        // Debug Statements
+        print('Selected Booking Day: $_bookingDay');
+        print('Is Sunday: $_isSunday');
+
+        print('Is Wednesday: $_isWednesday');
+      },
+      currentTime: DateTime.now(),
+      locale: LocaleType.en,
+      minTime: DateTime.now().add(Duration(days: 1)), // Start from tomorrow
+      maxTime: _calculateMaxDate(), // Next week's Friday
+      // Additional constraints can be set here if necessary
+    );
+  }
+
+  /**
+   * Calculates the maximum selectable date as next week's Friday.
+   *
+   * @returns {DateTime} - The date representing next week's Friday.
+   */
+  DateTime _calculateMaxDate() {
+    final DateTime today = DateTime.now();
+    final DateTime nextWeekFriday = today.add(Duration(
+        days: ((5 - today.weekday) + 7) % 7 + 1)); // Next week's Friday
+    print(
+        'Max selectable date: ${DateFormat('yyyy-MM-dd').format(nextWeekFriday)}');
+    return nextWeekFriday;
+  }
+
+  /**
+   * Passes the selected date to the parent component.
+   */
+  useEffect() {
+    // Note: 'useEffect' is not used in Flutter. This function can be removed.
+    // The date passing is already handled in the onConfirm callback.
+  }
+
+  /**
+   * Passes the selected date to the parent component.
+   */
+  // Removed the unused useEffect
+
+  // Helper: Determine Booking Day based on current date
+  void _determineBookingDay() {
+    final DateTime today = DateTime.now();
+    final int currentDay = today.weekday; // 1 = Monday, 7 = Sunday
+    DateTime bookedDayDate;
+
+    if (currentDay >= 1 && currentDay <= 4) {
+      // Monday to Thursday: Book for the next day
+      bookedDayDate = today.add(Duration(days: 1));
+    } else if (currentDay == 5 || currentDay == 6) {
+      // Friday or Saturday: Book for Monday
+      int daysToAdd = 8 - currentDay; // Friday +3, Saturday +2
+      bookedDayDate = today.add(Duration(days: daysToAdd));
+    } else {
+      // Sunday: Book for Monday
+      bookedDayDate = today.add(Duration(days: 1));
     }
 
+    String bookedDayName = DateFormat('EEEE').format(bookedDayDate);
+
     setState(() {
-      _filteredItems = filtered;
-      _selectedMenuId = menuId;
+      _bookingDay = bookedDayName;
+      _isSunday = today.weekday == DateTime.sunday;
+
+      _isWednesday =
+          bookedDayDate.weekday == DateTime.wednesday; // Set Wednesday
     });
+
+    // Debug Statements
+    print('Booking Day: $_bookingDay');
+    print('Is Sunday: $_isSunday');
+
+    print('Is Wednesday: $_isWednesday');
+  }
+
+  // Fetch Menu Data from API
+  Future<void> _fetchMenuData({DateTime? date}) async {
+    if (_jwtToken == null || _bookingDay.isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    // Format day to match backend expectations (e.g., lowercase)
+    String dayToFetch = date != null
+        ? DateFormat('EEEE').format(date).toLowerCase()
+        : _bookingDay.toLowerCase();
+
+    // Debug Statement
+    print('Fetching menu for: $dayToFetch');
+
+    final String apiUrl =
+        'https://www.backend.amddas.net/api/menus/menu/$dayToFetch';
+
+    try {
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $_jwtToken',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      // Debug Statements
+      print('API Response Status: ${response.statusCode}');
+      print('API Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        List<dynamic> data = json.decode(response.body);
+        setState(() {
+          _menuData = data;
+          _filterItems(_activeFilter);
+          _error = null;
+        });
+      } else if (response.statusCode == 403) {
+        setState(() {
+          _error = 'Session expired. Please log in again.';
+        });
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => LoginPage()),
+        );
+      } else {
+        setState(() {
+          _error = 'Failed to fetch menu data. Please try again.';
+          _filteredItems = [];
+          _selectedMenuId = null;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'An error occurred while fetching menu data.';
+        _filteredItems = [];
+        _selectedMenuId = null;
+      });
+      print('Error fetching menu data: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   // Handle OTP/Token Generation
@@ -440,12 +489,30 @@ class _MenuPageState extends State<MenuPage>
       return;
     }
 
+    if (_selectedDate == null) {
+      setState(() {
+        _error = 'Please select a delivery date.';
+      });
+      return;
+    }
+
+    // Check if within allowed time
+    if (!_isWithinAllowedTime()) {
+      setState(() {
+        _error = 'Token generation is only allowed between 12 PM to 8 PM.';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
+    final String formattedDate =
+        DateFormat('yyyy-MM-dd').format(_selectedDate!);
+    // Ensure dayToFetch is lowercase if backend expects it
     final String apiUrl =
-        'https://www.backend.amddas.net/api/orders/submit?menuIds=$_selectedMenuId&quantities=1';
+        'https://www.backend.amddas.net/api/orders/submit?menuIds=$_selectedMenuId&quantities=1&deliveryDate=$formattedDate';
 
     try {
       final response = await http.post(
@@ -458,12 +525,10 @@ class _MenuPageState extends State<MenuPage>
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Assuming the response contains tokenId and usage info
         Map<String, dynamic> responseData = json.decode(response.body);
 
-        // Adjust the keys based on your actual API response
         String tokenId = responseData['token']?.toString() ?? '';
-        String dateTimeToken = responseData['dateTimeToken']?.toString() ?? '';
+        String dateTimeToken = responseData['deliveryDate']?.toString() ?? '';
 
         String formattedBookingDate = _formatDate(dateTimeToken);
 
@@ -474,9 +539,12 @@ class _MenuPageState extends State<MenuPage>
           _formattedDate = formattedBookingDate;
           _isTokenGenerated = true;
           _error = null;
+          _tokens.add({
+            'token': tokenId,
+            'validFor': formattedBookingDate,
+          });
         });
 
-        // Fetch the latest order details after OTP generation
         await _fetchLatestOrderId();
       } else if (response.statusCode == 403) {
         setState(() {
@@ -503,20 +571,91 @@ class _MenuPageState extends State<MenuPage>
     }
   }
 
-  // Helper: Determine if filter options should be enabled/disabled
-  bool _isVegAvailable() {
-    // Veg is available unless it's Sunday
-    return !_isSunday;
+  // Handle Token Cancellation
+  Future<void> _cancelToken(String token, String deliveryDate) async {
+    if (_isSunday) {
+      setState(() {
+        _error = 'Token cancellation is not allowed on Sundays.';
+      });
+      return;
+    }
+
+    if (!_isWithinAllowedTime()) {
+      setState(() {
+        _error = 'Token cancellation is only allowed between 12 PM to 8 PM.';
+      });
+      return;
+    }
+
+    final String apiUrl =
+        'https://www.backend.amddas.net/api/order-details/cancel';
+
+    try {
+      final response = await http.put(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $_jwtToken',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'token': token}),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _tokens.removeWhere((t) => t['token'] == token);
+          _orderResponse = 'Your order has been cancelled successfully.';
+          _error = null;
+        });
+
+        if (_orderId != null) {
+          await _fetchOrderDetails(_orderId!);
+        }
+      } else {
+        setState(() {
+          _error = 'Failed to cancel order. Please try again.';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'An error occurred while cancelling the order.';
+      });
+      print('Error cancelling order: $e');
+    }
   }
 
-  bool _isEggAvailable() {
-    // Egg is available only on Tuesday
-    return _isTuesday;
+  // Helper function to show confirmation dialog before cancelling token
+  void _showCancelConfirmationDialog(String token, String deliveryDate) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Cancel Token'),
+          content: Text('Do you really want to cancel the token ID: $token?'),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Yes'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _cancelToken(token, deliveryDate);
+              },
+            ),
+            TextButton(
+              child: Text('No'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  bool _isNonVegAvailable() {
-    // Non-Veg is available only on Tuesday
-    return _isTuesday;
+  // Helper: Determine if within allowed time (12 PM to 8 PM)
+  bool _isWithinAllowedTime() {
+    final now = DateTime.now();
+    final hour = now.hour;
+    return hour >= 12 && hour < 20; // 12 PM to 8 PM
   }
 
   @override
@@ -527,10 +666,11 @@ class _MenuPageState extends State<MenuPage>
         appBar: AppBar(
           title: Text(
             'MENU',
-            style: GoogleFonts.pacifico(color: Colors.white),
+            style: GoogleFonts.josefinSans(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32),
           ),
           centerTitle: true,
-          backgroundColor: Color(0xFFEA4335),
+          backgroundColor: Color.fromARGB(255, 41, 110, 61),
         ),
         body: Center(child: CircularProgressIndicator()),
       );
@@ -540,11 +680,12 @@ class _MenuPageState extends State<MenuPage>
       appBar: AppBar(
         title: Text(
           'MENU',
-          style: GoogleFonts.pacifico(color: Colors.white),
+          style: GoogleFonts.josefinSans(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32),
         ),
         centerTitle: true,
         backgroundColor:
-            Color(0xFFEA4335), // Set the AppBar background color to orange
+            Color.fromARGB(255, 41, 110, 61), // Set the AppBar background color
       ),
       body: Stack(
         children: [
@@ -567,30 +708,141 @@ class _MenuPageState extends State<MenuPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Remove the scrolling text widget here
+                  // User Information Card
+                  Card(
+                    color: Colors.white.withOpacity(0.8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ListTile(
+                      leading: Icon(Icons.person, color: Colors.black),
+                      title: Text(
+                        'Email: $_email',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        'User ID: $_userId',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ),
 
                   SizedBox(height: 20),
 
-                  // Display User ID and Email
+                  // Token Details Carousel
+                  if (_tokens.isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Your Tokens:',
+                          style: GoogleFonts.josefinSans(
+                              fontSize: 20,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 10),
+                        CarouselSlider.builder(
+                          itemCount: _tokens.length,
+                          itemBuilder:
+                              (BuildContext context, int index, int realIdx) {
+                            var token = _tokens[index];
+                            return Card(
+                              color: Colors.white.withOpacity(0.8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Token ID: ${token['token']}',
+                                      style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                    SizedBox(height: 10),
+                                    Text(
+                                      'Valid For: ${token['validFor']}',
+                                      style: TextStyle(fontSize: 16),
+                                    ),
+                                    SizedBox(height: 20),
+                                    // Disable the cancel button if today is Sunday
+                                    if (!_isSunday)
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          _showCancelConfirmationDialog(
+                                              token['token'],
+                                              token['validFor']);
+                                        },
+                                        icon: Icon(Icons.delete),
+                                        label: Text('Cancel Token'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      )
+                                    else
+                                      Text(
+                                        'Token cannot be cancelled on Sundays',
+                                        style: TextStyle(
+                                          color: Colors.red,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                          options: CarouselOptions(
+                            height: 200.0,
+                            enlargeCenterPage: true,
+                            autoPlay: true,
+                            aspectRatio: 16 / 9,
+                            autoPlayCurve: Curves.fastOutSlowIn,
+                            enableInfiniteScroll: true,
+                            autoPlayAnimationDuration:
+                                Duration(milliseconds: 1500),
+                            viewportFraction: 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                  SizedBox(height: 20),
+
+                  // Date Picker Section using flutter_datetime_picker_plus
                   Card(
                     color: Colors.white.withOpacity(0.8),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(8.0),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'User ID: ${_userId ?? 'N/A'}',
-                            style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          SizedBox(height: 10),
-                          Text(
-                            'Email: ${_email ?? 'N/A'}',
-                            style: TextStyle(fontSize: 16),
+                          ListTile(
+                            leading: Icon(Icons.calendar_today),
+                            title: Text(
+                              _selectedDate == null
+                                  ? 'Select Delivery Date'
+                                  : 'Delivery Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: _selectedDate != null
+                                ? Text(
+                                    'Day: ${DateFormat('EEEE').format(_selectedDate!)}',
+                                    style: TextStyle(
+                                        fontSize: 14, color: Colors.grey[700]),
+                                  )
+                                : null,
+                            trailing: Icon(Icons.arrow_forward_ios),
+                            onTap: _selectDate,
                           ),
                         ],
                       ),
@@ -599,62 +851,11 @@ class _MenuPageState extends State<MenuPage>
 
                   SizedBox(height: 20),
 
-                  // OTP Details Card
-                  if (_tokenn != null && _formattedDate != null)
-                    Card(
-                      color: Colors.white.withOpacity(0.8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            // Token ID
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Token ID:',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16),
-                                ),
-                                Text(
-                                  _tokenn!,
-                                  style: TextStyle(fontSize: 16),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 10),
-                            // Valid For
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Valid For:',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16),
-                                ),
-                                Text(
-                                  _formattedDate!,
-                                  style: TextStyle(fontSize: 16),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                  SizedBox(height: 20),
-
                   // Menu Title
                   Text(
                     'Booking for $_bookingDay Menu',
-                    style:
-                        GoogleFonts.pacifico(fontSize: 24, color: Colors.white),
+                    style: GoogleFonts.josefinSans(
+                        fontSize: 24, color: Colors.white),
                     textAlign: TextAlign.center,
                   ),
 
@@ -684,7 +885,8 @@ class _MenuPageState extends State<MenuPage>
                         // Check availability before applying filter
                         if (newValue == 'Veg' && !_isVegAvailable()) {
                           setState(() {
-                            _error = 'Vegetarian menu is not available today.';
+                            _error =
+                                'Vegetarian menu is not available on Sundays.';
                           });
                           return;
                         }
@@ -721,18 +923,27 @@ class _MenuPageState extends State<MenuPage>
                               itemCount: _filteredItems.length,
                               itemBuilder: (context, index) {
                                 var menuItem = _filteredItems[index];
+                                var itemName = menuItem['item']?['itemName'] ??
+                                    'Unnamed Item';
+                                var categoryName = menuItem['item']?['category']
+                                        ?['categoryName'] ??
+                                    'Uncategorized';
+
+                                // Debug Statement
+                                print('Displaying Menu Item: $itemName');
+
                                 return Card(
                                   color: Colors.white.withOpacity(0.8),
                                   margin: EdgeInsets.symmetric(vertical: 5),
                                   child: ListTile(
                                     title: Text(
-                                      menuItem['item']['itemName'],
+                                      itemName,
                                       style: TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.bold),
                                     ),
                                     subtitle: Text(
-                                      'Category: ${menuItem['item']['category']['categoryName']}',
+                                      'Category: $categoryName',
                                       style: TextStyle(fontSize: 16),
                                     ),
                                   ),
@@ -751,12 +962,25 @@ class _MenuPageState extends State<MenuPage>
 
                   SizedBox(height: 20),
 
-                  // Generate OTP Button
+                  // Generate Token Button
                   ElevatedButton(
-                    onPressed:
-                        (_isSunday || _quantity == 1) ? null : _generateToken,
+                    onPressed: (_isSunday ||
+                            (_selectedDate != null &&
+                                _tokens.any((t) =>
+                                    t['validFor'] ==
+                                    DateFormat('yyyy-MM-dd')
+                                        .format(_selectedDate!))) ||
+                            !_isWithinAllowedTime())
+                        ? null
+                        : _generateToken,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: (_isSunday || _quantity == 1)
+                      backgroundColor: (_isSunday ||
+                              (_selectedDate != null &&
+                                  _tokens.any((t) =>
+                                      t['validFor'] ==
+                                      DateFormat('yyyy-MM-dd')
+                                          .format(_selectedDate!))) ||
+                              !_isWithinAllowedTime())
                           ? Colors.grey
                           : Color(0xFFFC8019),
                       padding:
@@ -766,11 +990,17 @@ class _MenuPageState extends State<MenuPage>
                       ),
                     ),
                     child: Text(
-                      _quantity == 1
+                      (_selectedDate != null &&
+                              _tokens.any((t) =>
+                                  t['validFor'] ==
+                                  DateFormat('yyyy-MM-dd')
+                                      .format(_selectedDate!)))
                           ? 'Token Already Generated'
                           : _isSunday
                               ? 'Booking Not Allowed Today'
-                              : 'Generate Token',
+                              : !_isWithinAllowedTime()
+                                  ? 'Generate Token (Unavailable)'
+                                  : 'Generate Token',
                       style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -905,9 +1135,9 @@ class _MenuPageState extends State<MenuPage>
         return AlertDialog(
           title: Text('Booking Information'),
           content: Text(
-            'Booking starts from 12 PM to 12 AM.\n'
+            'Booking is allowed from 12 PM to 8 PM.\n'
             'Check the menu after 7:30 PM.\n'
-            'Please check the geological calendar for holidays before booking.',
+            'Please check the local holidays before booking.',
           ),
           actions: <Widget>[
             TextButton(
@@ -920,5 +1150,23 @@ class _MenuPageState extends State<MenuPage>
         );
       },
     );
+  }
+
+  // Helper: Determine if Veg filter is available
+  bool _isVegAvailable() {
+    // Veg is available unless it's Sunday
+    return !_isSunday;
+  }
+
+  // Helper: Determine if Egg filter is available
+  bool _isEggAvailable() {
+    // Egg is available on Tuesday and Wednesday
+    return _isWednesday;
+  }
+
+  // Helper: Determine if Non-Veg filter is available
+  bool _isNonVegAvailable() {
+    // Non-Veg is available on Tuesday and Wednesday
+    return _isWednesday;
   }
 }

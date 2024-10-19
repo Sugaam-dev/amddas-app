@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'login_page.dart'; // Import the Login Page
 import 'menu_page.dart'; // Import the Menu Page
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Import flutter_secure_storage
+import 'package:google_fonts/google_fonts.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -58,13 +59,12 @@ class _SplashScreenState extends State<SplashScreen> {
               height: 150.0, // Adjust the height as needed
             ),
             const SizedBox(height: 20.0), // Space between logo and text
-            const Text(
-              'AMDDAS Foods', // Branding the app with AMDDAS Foods name
-              style: TextStyle(
-                fontSize: 24.0,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
+            Text(
+              'Amddas Foods', // Branding the app with AMDDAS Foods name
+              style: GoogleFonts.josefinSans(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 32),
             ),
           ],
         ),

@@ -147,12 +147,16 @@ class _ForgotPasswordOTPPageState extends State<ForgotPasswordOTPPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white, // Set the background color to white
       appBar: AppBar(
-        title:
-            Text('Enter OTP', style: GoogleFonts.pacifico(color: Colors.white)),
+        title: Text(
+          'Enter OTP',
+          style: GoogleFonts.josefinSans(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32),
+        ),
         centerTitle: true,
-        backgroundColor: Color(
-            0xFFEA4335), // Set the AppBar background color to Pumpkin #FC8019
+        backgroundColor: Color.fromARGB(255, 41, 110,
+            61), // Set the AppBar background color to Pumpkin #FC8019
       ),
       body: SafeArea(
         child: Padding(
@@ -224,8 +228,8 @@ class _ForgotPasswordOTPPageState extends State<ForgotPasswordOTPPage> {
                             style:
                                 TextStyle(color: Colors.white)), // White text
                         style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              Color(0xFFFC8019), // Pumpkin color button
+                          backgroundColor: Color.fromARGB(
+                              255, 41, 110, 61), // Pumpkin color button
                           padding: EdgeInsets.symmetric(
                               horizontal: 80, vertical: 15),
                           shape: RoundedRectangleBorder(

@@ -28,16 +28,16 @@ class _SignUpPageState extends State<SignUpPage> {
       return 'Please enter your password';
     }
     if (value.length < 6) {
-      return 'Password must be at least 6 characters long';
+      return 'Password must be 6 characters long';
     }
     if (!RegExp(r'^(?=.*[A-Z])').hasMatch(value)) {
-      return 'Password must contain at least one uppercase letter';
+      return 'Password must contain one uppercase letter';
     }
     if (!RegExp(r'^(?=.*[0-9])').hasMatch(value)) {
-      return 'Password must contain at least one number';
+      return 'Password must contain one number';
     }
     if (!RegExp(r'^(?=.*[!@#\$&*~])').hasMatch(value)) {
-      return 'Password must contain at least one special character';
+      return 'Password must contain special character';
     }
     return null;
   }
@@ -128,7 +128,12 @@ class _SignUpPageState extends State<SignUpPage> {
               builder: (context) => OTPPage(email: email)), // Pass email
         );
       } else {
-        // Handle different status codes accordingly
+        // Custom error message for account already exists
+        String errorMessage =
+            'Account found! You already have an account with us.';
+
+        /*
+        // Previous error message logic
         String errorMessage = 'Registration failed. Please try again.';
         if (isJson) {
           var errorData = json.decode(response.body);
@@ -136,11 +141,11 @@ class _SignUpPageState extends State<SignUpPage> {
           errorMessage = errorData['message'] ?? errorMessage;
         } else {
           // If response is not JSON, use the raw response body
-          errorMessage =
-              response.body.isNotEmpty ? response.body : errorMessage;
+          errorMessage = response.body.isNotEmpty ? response.body : errorMessage;
         }
+        */
 
-        // Show error message
+        // Show custom error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(errorMessage)),
         );
@@ -165,10 +170,10 @@ class _SignUpPageState extends State<SignUpPage> {
       appBar: AppBar(
         title: Text(
           'Sign Up',
-          style: GoogleFonts.pacifico(color: Colors.white),
+          style: GoogleFonts.josefinSans(color: Colors.white),
         ),
         centerTitle: true,
-        backgroundColor: Color(0xFFEA4335), // Pumpkin color
+        backgroundColor: Color.fromARGB(255, 41, 110, 61), // Pumpkin color
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -357,8 +362,9 @@ class _SignUpPageState extends State<SignUpPage> {
                         )
                       : Text('Sign Up', style: TextStyle(color: Colors.white)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _isAgreeToPrivacy ? Color(0xFFEA4335) : Colors.grey,
+                    backgroundColor: _isAgreeToPrivacy
+                        ? Color.fromARGB(255, 41, 110, 61)
+                        : Colors.grey,
                     padding: EdgeInsets.symmetric(horizontal: 80, vertical: 15),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),

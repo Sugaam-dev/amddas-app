@@ -3,6 +3,7 @@ import 'login_page.dart'; // Import the login page to redirect after confirmatio
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http; // Import http package
 import 'dart:convert'; // For JSON encoding and decoding
+import 'package:flutter/services.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   final String email; // Accept the email as a parameter
@@ -42,6 +43,31 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       return 'Password must contain at least one special character';
     }
     return null;
+  }
+
+  // Back Button Handler
+  Future<bool> _onWillPop() async {
+    return await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Exit App?'),
+            content: Text('Do you want to exit the application?'),
+            actions: [
+              TextButton(
+                child: Text('No'),
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+              TextButton(
+                child: Text('Yes'),
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                  SystemNavigator.pop(); // Exit the app
+                },
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   // Function to reset the password using the API
@@ -97,9 +123,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
           // Automatically redirect to Login Page after 3 seconds
           Future.delayed(Duration(seconds: 3), () {
-            Navigator.pushReplacement(
+            Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (context) => LoginPage()),
+              (Route<dynamic> route) => false,
             );
           });
         } else {
@@ -140,147 +167,196 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Reset Password',
-            style: GoogleFonts.josefinSans(color: Colors.white)),
-        centerTitle: true,
-        backgroundColor:
-            Color.fromARGB(255, 41, 110, 61), // Set AppBar to Pumpkin color
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: _isPasswordReset
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.check_circle_outline,
-                        color: Colors.green, size: 100),
-                    SizedBox(height: 20),
-                    Text(
-                      'Your password has been reset successfully!',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 10),
-                    Text('Redirecting to Login Page in 3 seconds...',
-                        textAlign: TextAlign.center),
-                  ],
-                ),
-              )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+    return WillPopScope(
+      onWillPop: _onWillPop, // Back button handler
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              // Custom Header Section
+              Stack(
                 children: [
-                  SizedBox(height: 16.0), // Small gap below AppBar
-                  // Display GIF directly below the AppBar
-                  Image.asset(
-                    'gif/reset.gif', // Path to your GIF
-                    height: 200, // Set height for the GIF
+                  ClipPath(
+                    clipper: HeaderClipper(),
+                    child: Container(
+                      height: 150,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Color.fromARGB(255, 41, 110, 61),
+                            Color.fromARGB(255, 58, 190, 96)
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                    ),
                   ),
-                  SizedBox(height: 20.0), // Margin below the GIF
-
-                  // Form for password reset
-                  Form(
-                    key: _formKey,
-                    child: Column(
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 40),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        // New Password Input Field
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: !_passwordVisible,
-                          decoration: InputDecoration(
-                            labelText: 'New Password',
-                            border: OutlineInputBorder(
-                              borderSide: BorderSide(color: Color(0xFFFC8019)),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                  color: Color(0xFFFC8019),
-                                  width: 2), // Pumpkin color
-                            ),
-                            prefixIcon: Icon(Icons.lock),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _passwordVisible
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _passwordVisible = !_passwordVisible;
-                                });
-                              },
-                            ),
-                          ),
-                          validator: _validatePassword,
+                        IconButton(
+                          icon: Icon(Icons.arrow_back, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
                         ),
-                        SizedBox(height: 16.0),
-
-                        // Confirm Password Input Field
-                        TextFormField(
-                          controller: _confirmPasswordController,
-                          obscureText: !_confirmPasswordVisible,
-                          decoration: InputDecoration(
-                            labelText: 'Confirm Password',
-                            border: OutlineInputBorder(
-                              borderSide: BorderSide(color: Color(0xFFFC8019)),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                  color: Color(0xFFFC8019),
-                                  width: 2), // Pumpkin color
-                            ),
-                            prefixIcon: Icon(Icons.lock),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _confirmPasswordVisible
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _confirmPasswordVisible =
-                                      !_confirmPasswordVisible;
-                                });
-                              },
-                            ),
+                        Text(
+                          'Reset Password',
+                          style: TextStyle(
+                            fontSize: 28,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: GoogleFonts.josefinSans().fontFamily,
                           ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please confirm your password';
-                            }
-                            if (value != _passwordController.text) {
-                              return 'Passwords do not match';
-                            }
-                            return null;
-                          },
                         ),
-                        SizedBox(height: 20.0),
-
-                        // Reset Password Button
-                        _isLoading
-                            ? CircularProgressIndicator()
-                            : ElevatedButton(
-                                onPressed: _resetPassword,
-                                child: Text('Reset Password',
-                                    style: TextStyle(color: Colors.white)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Color.fromARGB(
-                                      255, 41, 110, 61), // Pumpkin color button
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 80, vertical: 15),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                              ),
+                        SizedBox(width: 40), // For balance with back button
                       ],
                     ),
                   ),
                 ],
               ),
+              SizedBox(height: 16.0), // Small gap below header
+
+              // Main Content Section
+              _isPasswordReset
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle_outline,
+                              color: Colors.green, size: 100),
+                          SizedBox(height: 20),
+                          Text(
+                            'Your password has been reset successfully!',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 10),
+                          Text('Redirecting to Login Page in 3 seconds...',
+                              textAlign: TextAlign.center),
+                        ],
+                      ),
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Display GIF
+                        Image.asset(
+                          'gif/reset.gif',
+                          height: 200,
+                        ),
+                        SizedBox(height: 20.0), // Margin below the GIF
+
+                        // Form for password reset
+                        Form(
+                          key: _formKey,
+                          child: Column(
+                            children: [
+                              // New Password Input Field
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: !_passwordVisible,
+                                decoration: InputDecoration(
+                                  labelText: 'New Password',
+                                  border: OutlineInputBorder(
+                                    borderSide:
+                                        BorderSide(color: Color(0xFFFC8019)),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                        color: Color(0xFFFC8019), width: 2),
+                                  ),
+                                  prefixIcon: Icon(Icons.lock),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _passwordVisible
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _passwordVisible = !_passwordVisible;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                validator: _validatePassword,
+                              ),
+                              SizedBox(height: 16.0),
+
+                              // Confirm Password Input Field
+                              TextFormField(
+                                controller: _confirmPasswordController,
+                                obscureText: !_confirmPasswordVisible,
+                                decoration: InputDecoration(
+                                  labelText: 'Confirm Password',
+                                  border: OutlineInputBorder(
+                                    borderSide:
+                                        BorderSide(color: Color(0xFFFC8019)),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                        color: Color(0xFFFC8019), width: 2),
+                                  ),
+                                  prefixIcon: Icon(Icons.lock),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _confirmPasswordVisible
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _confirmPasswordVisible =
+                                            !_confirmPasswordVisible;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please confirm your password';
+                                  }
+                                  if (value != _passwordController.text) {
+                                    return 'Passwords do not match';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              SizedBox(height: 20.0),
+
+                              // Reset Password Button
+                              _isLoading
+                                  ? CircularProgressIndicator()
+                                  : ElevatedButton(
+                                      onPressed: _resetPassword,
+                                      child: Text('Reset Password',
+                                          style:
+                                              TextStyle(color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            Color.fromARGB(255, 41, 110, 61),
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 80, vertical: 15),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                    ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,14 +1,15 @@
+// menu_page.dart
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:carousel_slider/carousel_slider.dart';
-import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart'; // Updated Date Picker
 
-import 'user_page.dart'; // Navigation to User Page
-import 'login_page.dart'; // Navigation to Login Page
+import 'login_page.dart';
+import 'user_page.dart';
 
 class MenuPage extends StatefulWidget {
   @override
@@ -17,62 +18,45 @@ class MenuPage extends StatefulWidget {
 
 class _MenuPageState extends State<MenuPage>
     with SingleTickerProviderStateMixin {
-  // State Variables
+  // State variables
+  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  int _currentIndex = 0; // Current index for BottomNavigationBar
+
+  // Menu and token data
   List<dynamic> _menuData = [];
   List<dynamic> _filteredItems = [];
-  String _activeFilter = 'Veg'; // Default filter
+  String? _activeFilter; // No default filter
   String _bookingDay = '';
-  String? _otpTokenId;
-  String? _tokenn;
-  String? _formattedDate;
-  String? _orderResponse;
-  String? _error;
-  bool _isSunday = false;
-  bool _isTokenGenerated = false;
-
-  bool _isWednesday = false; // New state variable for Wednesday
-  String? _selectedMenuId;
-  String? _orderId;
-  Map<String, dynamic>? _orderDetails;
-  bool _isLoading = false;
-  List<dynamic> _tokens = []; // List of tokens for the carousel
-  DateTime? _selectedDate; // Updated to DateTime type
-
-  // Animation Controller for vibration effect
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  // Secure Storage
-  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
-
-  // JWT Token, User ID, and Email
   String? _jwtToken;
   String? _userId;
   String? _email;
-
-  // Initialization flag
   bool _isInitialized = false;
+  bool _isLoading = false;
+  String? _error;
+  bool _isTodaySunday = false;
+  bool _isWednesday = false;
+  String? _selectedMenuId;
+  String? _orderId;
+  Map<String, dynamic>? _orderDetails;
+  List<dynamic> _tokens = []; // List of tokens for the slider
+  DateTime? _selectedDate;
+  bool _isGenerateButtonDisabled = false;
+  final PageController _pageController = PageController();
+  int _currentPageIndex = 0;
+  List<String> _menuTypes = ['Veg']; // Default to 'Veg' only
+
+  // Animation Controller for notification icon
+  late AnimationController _controller;
+  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
     _initializeAnimation();
-    _initializeMenu().then((_) {
-      _initializeOrder().then((_) {
-        setState(() {
-          _isInitialized = true;
-        });
-      });
-    });
+    _initializeCurrentDay();
+    _initializeMenu();
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  // Initialize Animation Controller
   void _initializeAnimation() {
     _controller = AnimationController(
       duration: const Duration(milliseconds: 500),
@@ -81,7 +65,61 @@ class _MenuPageState extends State<MenuPage>
     _animation = Tween<double>(begin: -5, end: 5).animate(_controller);
   }
 
-  // Initialize Menu and Booking Day
+  void _initializeCurrentDay() {
+    final DateTime today = DateTime.now();
+    setState(() {
+      _isTodaySunday = today.weekday == DateTime.sunday;
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  // Navigation Handler
+  void _handleNavigation(int index) {
+    if (index == _currentIndex) return;
+
+    if (index == 1) {
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation1, animation2) => UserPage(),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+        ),
+      );
+    }
+  }
+
+  // Back Button Handler
+  Future<bool> _onWillPop() async {
+    return await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Exit App?'),
+            content: Text('Do you want to exit the application?'),
+            actions: [
+              TextButton(
+                child: Text('No'),
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+              TextButton(
+                child: Text('Yes'),
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                  SystemNavigator.pop(); // Exit the app
+                },
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Future<void> _initializeMenu() async {
     String? token = await _secureStorage.read(key: 'jwt_token');
     String? email = await _secureStorage.read(key: 'user_email');
@@ -94,28 +132,13 @@ class _MenuPageState extends State<MenuPage>
         _userId = userId;
       });
 
-      print('Retrieved JWT Token: $_jwtToken');
-      print('Retrieved Email: $_email');
-      print('Retrieved User ID: $_userId');
-
       _determineBookingDay();
       await _fetchMenuData();
-    } else {
-      String missingData = '';
-      if (token == null) missingData += 'JWT Token, ';
-      if (email == null) missingData += 'Email, ';
-      if (userId == null) missingData += 'User ID, ';
-
-      if (missingData.isNotEmpty) {
-        missingData = missingData.substring(0, missingData.length - 2);
-      }
-
+      await _fetchLatestOrderId();
       setState(() {
-        _error = 'Missing required data: $missingData.';
+        _isInitialized = true;
       });
-
-      print('Error: Missing required data: $missingData');
-
+    } else {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => LoginPage()),
@@ -123,13 +146,186 @@ class _MenuPageState extends State<MenuPage>
     }
   }
 
-  // Initialize Order (Fetch Latest Order ID and Details)
-  Future<void> _initializeOrder() async {
-    if (_jwtToken == null || _userId == null) return;
-    await _fetchLatestOrderId();
+  void _determineBookingDay() {
+    final DateTime today = DateTime.now();
+    final int currentDay = today.weekday; // 1 = Monday, 7 = Sunday
+    DateTime bookedDayDate;
+
+    if (currentDay >= 1 && currentDay <= 4) {
+      // Monday to Thursday: Book for the next day
+      bookedDayDate = today.add(Duration(days: 1));
+    } else if (currentDay == 5) {
+      // Friday: Book for Monday
+      int daysToAdd = 3; // Friday +3 to get to Monday
+      bookedDayDate = today.add(Duration(days: daysToAdd));
+    } else if (currentDay == 6 || currentDay == 7) {
+      // Saturday or Sunday: Book for Monday
+      int daysToAdd = 8 - currentDay; // Saturday +2, Sunday +1
+      bookedDayDate = today.add(Duration(days: daysToAdd));
+    } else {
+      // Default to next day
+      bookedDayDate = today.add(Duration(days: 1));
+    }
+
+    String bookedDayName = DateFormat('EEEE').format(bookedDayDate);
+
+    setState(() {
+      _bookingDay = bookedDayName;
+      _isWednesday = bookedDayDate.weekday == DateTime.wednesday;
+
+      // Update menu types based on whether it's Wednesday
+      if (_isWednesday) {
+        _menuTypes = ['Veg', 'Egg', 'Non-Veg'];
+      } else {
+        _menuTypes = ['Veg'];
+      }
+      _activeFilter = null; // Reset active filter
+    });
   }
 
-  // Fetch Latest Order ID using userId
+  Future<void> _fetchMenuData({DateTime? date}) async {
+    if (_jwtToken == null || _bookingDay.isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    String dayToFetch =
+        date != null ? DateFormat('EEEE').format(date) : _bookingDay;
+
+    final String apiUrl =
+        'https://www.backend.amddas.net/api/menus/menu/$dayToFetch';
+
+    try {
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $_jwtToken',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        List<dynamic> data = json.decode(response.body);
+        setState(() {
+          _menuData = data;
+          _filterItems(_activeFilter);
+          _error = null;
+        });
+      } else if (response.statusCode == 403) {
+        setState(() {
+          _error = 'Session expired. Please log in again.';
+        });
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => LoginPage()),
+        );
+      } else {
+        setState(() {
+          _error = 'Failed to fetch menu data. Please try again.';
+          _filteredItems = [];
+          _selectedMenuId = null;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'An error occurred while fetching menu data.';
+        _filteredItems = [];
+        _selectedMenuId = null;
+      });
+      print('Error fetching menu data: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _filterItems(String? category) {
+    setState(() {
+      _activeFilter = category;
+    });
+
+    if (category == null) {
+      setState(() {
+        _filteredItems = [];
+        _selectedMenuId = null;
+        _error = null; // Optionally clear any existing errors
+      });
+      return;
+    }
+
+    if (_menuData.isEmpty) {
+      setState(() {
+        _error = 'No menu data available.';
+        _filteredItems = [];
+        _selectedMenuId = null;
+      });
+      return;
+    }
+
+    List<dynamic> filtered = [];
+    String? menuId;
+
+    try {
+      if (category == 'Veg') {
+        dynamic vegMenu;
+        try {
+          vegMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 1);
+        } catch (e) {
+          vegMenu = null;
+        }
+        if (vegMenu != null) {
+          filtered = vegMenu['menuItems'];
+          menuId = vegMenu['menuId'].toString();
+        }
+      } else if (category == 'Egg') {
+        dynamic eggMenu;
+        try {
+          eggMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 2);
+        } catch (e) {
+          eggMenu = null;
+        }
+        if (eggMenu != null) {
+          filtered = eggMenu['menuItems'];
+          menuId = eggMenu['menuId'].toString();
+        }
+      } else if (category == 'Non-Veg') {
+        dynamic nonVegMenu;
+        try {
+          nonVegMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 0);
+        } catch (e) {
+          nonVegMenu = null;
+        }
+        if (nonVegMenu != null) {
+          filtered = nonVegMenu['menuItems'];
+          menuId = nonVegMenu['menuId'].toString();
+        }
+      }
+
+      if (filtered.isEmpty) {
+        setState(() {
+          _error = 'No items found for $category on $_bookingDay.';
+          _filteredItems = [];
+          _selectedMenuId = null;
+        });
+      } else {
+        setState(() {
+          _filteredItems = filtered;
+          _selectedMenuId = menuId;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'An error occurred while filtering menu items.';
+        _filteredItems = [];
+        _selectedMenuId = null;
+      });
+      print('Error in _filterItems: $e');
+    }
+  }
+
   Future<void> _fetchLatestOrderId() async {
     final String apiUrl =
         'https://www.backend.amddas.net/api/orders/latest/$_userId';
@@ -171,10 +367,9 @@ class _MenuPageState extends State<MenuPage>
     }
   }
 
-  // Fetch Order Details using orderId
   Future<void> _fetchOrderDetails(String orderId) async {
     final String apiUrl =
-        'https://www.backend.amddas.net/api/order-details/user?userId=$_userId';
+        'https://www.backend.amddas.net/api/order-details/user/future?userId=$_userId';
 
     setState(() {
       _isLoading = true;
@@ -194,6 +389,7 @@ class _MenuPageState extends State<MenuPage>
         List<dynamic> activeTokens =
             data.where((detail) => detail['isActive'] == 1).toList();
 
+        // Format tokens
         List<dynamic> formattedTokens = activeTokens.map((detail) {
           return {
             'token': detail['token'],
@@ -203,10 +399,9 @@ class _MenuPageState extends State<MenuPage>
 
         setState(() {
           _orderDetails = data.isNotEmpty ? data[0] : null;
-          _tokenn = _orderDetails?['token']?.toString();
-          _formattedDate = _formatDate(_orderDetails?['deliveryDate']);
-          _error = null;
           _tokens = formattedTokens;
+          _isGenerateButtonDisabled = _tokens.isNotEmpty;
+          _error = null;
         });
       } else if (response.statusCode == 403) {
         setState(() {
@@ -219,11 +414,15 @@ class _MenuPageState extends State<MenuPage>
       } else {
         setState(() {
           _error = 'Failed to fetch order details.';
+          _tokens = [];
+          _isGenerateButtonDisabled = false;
         });
       }
     } catch (e) {
       setState(() {
         _error = 'An error occurred while fetching order details.';
+        _tokens = [];
+        _isGenerateButtonDisabled = false;
       });
       print('Error fetching order details: $e');
     } finally {
@@ -233,13 +432,12 @@ class _MenuPageState extends State<MenuPage>
     }
   }
 
-  // Helper: Format Date
   String _formatDate(String? isoString) {
     if (isoString == null) return 'Invalid Date';
 
     DateTime date;
     try {
-      date = DateTime.parse(isoString);
+      date = DateTime.parse(isoString).toLocal();
     } catch (e) {
       return 'Invalid Date';
     }
@@ -247,240 +445,133 @@ class _MenuPageState extends State<MenuPage>
     return DateFormat('yyyy-MM-dd').format(date);
   }
 
-  // Filtering Function using Dropdown
-  void _filterItems(String category) {
-    setState(() {
-      _activeFilter = category;
-    });
+  void _selectDate(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Select Delivery Date'),
+          content: Container(
+            height: 400,
+            width: 300,
+            child: SfDateRangePicker(
+              onSelectionChanged: _onDateSelectionChanged,
+              selectionMode: DateRangePickerSelectionMode.single,
+              minDate:
+                  DateTime.now().add(Duration(days: 1)), // Start from tomorrow
+              maxDate: _calculateMaxDate(),
+              enablePastDates: false,
+              initialSelectedDate: null,
+              // Disable Saturdays and Sundays
+              monthViewSettings: DateRangePickerMonthViewSettings(
+                blackoutDates: _getBlackoutDates(),
+              ),
+              monthCellStyle: DateRangePickerMonthCellStyle(
+                blackoutDateTextStyle: TextStyle(
+                  color: Colors.red,
+                  decoration: TextDecoration.lineThrough,
+                ),
+                todayTextStyle:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                selectionTextStyle:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                disabledDatesDecoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: Text('OK'),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                if (_selectedDate != null) {
+                  setState(() {
+                    _bookingDay = DateFormat('EEEE').format(_selectedDate!);
+                    _isWednesday = _selectedDate!.weekday == DateTime.wednesday;
+                    _isGenerateButtonDisabled = false;
 
-    if (_menuData.isEmpty) {
-      print('Menu data is empty.');
-      setState(() {
-        _error = 'No menu data available.';
-        _filteredItems = [];
-        _selectedMenuId = null;
-      });
-      return;
-    }
+                    // Update menu types based on selected date
+                    if (_isWednesday) {
+                      _menuTypes = ['Veg', 'Egg', 'Non-Veg'];
+                    } else {
+                      _menuTypes = ['Veg'];
+                    }
+                    _activeFilter = null; // Reset active filter
 
-    print('Filtering items for category: $category');
-    print('Menu Data: $_menuData');
-
-    List<dynamic> filtered = [];
-    String? menuId;
-
-    try {
-      if (category == 'Veg') {
-        var vegMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 1,
-            orElse: () => null);
-        if (vegMenu != null) {
-          filtered = vegMenu['menuItems'];
-          menuId = vegMenu['menuId'].toString();
-        }
-      } else if (category == 'Egg') {
-        var eggMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 2,
-            orElse: () => null);
-        if (eggMenu != null) {
-          filtered = eggMenu['menuItems'];
-          menuId = eggMenu['menuId'].toString();
-        }
-      } else if (category == 'Non-Veg') {
-        var nonVegMenu = _menuData.firstWhere((menu) => menu['isVeg'] == 0,
-            orElse: () => null);
-        if (nonVegMenu != null) {
-          filtered = nonVegMenu['menuItems'];
-          menuId = nonVegMenu['menuId'].toString();
-        }
-      }
-
-      if (filtered.isEmpty) {
-        setState(() {
-          _error = 'No items found for $category on $_bookingDay.';
-          _filteredItems = [];
-          _selectedMenuId = null;
-        });
-      } else {
-        setState(() {
-          _filteredItems = filtered;
-          _selectedMenuId = menuId;
-          _error = null;
-        });
-      }
-
-      // Debug Statements
-      print('Filtered Items: $filtered');
-      print('Selected Menu ID: $menuId');
-    } catch (e) {
-      setState(() {
-        _error = 'An error occurred while filtering menu items.';
-        _filteredItems = [];
-        _selectedMenuId = null;
-      });
-      print('Error in _filterItems: $e');
-    }
-  }
-
-  // Handle Date Selection using Date Picker Plus
-  void _selectDate() {
-    DatePicker.showDatePicker(
-      context,
-      showTitleActions: true,
-      onConfirm: (date) {
-        setState(() {
-          _selectedDate = date;
-          _bookingDay = DateFormat('EEEE').format(date);
-          _isSunday = date.weekday == DateTime.sunday;
-
-          _isWednesday = date.weekday == DateTime.wednesday; // Set Wednesday
-          _error = null;
-        });
-        _fetchMenuData(date: date);
-
-        // Debug Statements
-        print('Selected Booking Day: $_bookingDay');
-        print('Is Sunday: $_isSunday');
-
-        print('Is Wednesday: $_isWednesday');
+                    _error = null;
+                  });
+                  await _fetchMenuData(date: _selectedDate);
+                } else {
+                  setState(() {
+                    _error = 'Please select a delivery date.';
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Please select a delivery date.'),
+                      backgroundColor: Colors.red,
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        );
       },
-      currentTime: DateTime.now(),
-      locale: LocaleType.en,
-      minTime: DateTime.now().add(Duration(days: 1)), // Start from tomorrow
-      maxTime: _calculateMaxDate(), // Next week's Friday
-      // Additional constraints can be set here if necessary
     );
   }
 
-  /**
-   * Calculates the maximum selectable date as next week's Friday.
-   *
-   * @returns {DateTime} - The date representing next week's Friday.
-   */
+  void _onDateSelectionChanged(DateRangePickerSelectionChangedArgs args) {
+    if (args.value is DateTime) {
+      DateTime selected = args.value;
+      if (selected.weekday == DateTime.saturday ||
+          selected.weekday == DateTime.sunday) {
+        // Should not happen as weekends are disabled, but just in case
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('Saturdays and Sundays are not allowed for bookings.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+      setState(() {
+        _selectedDate = selected;
+      });
+    }
+  }
+
   DateTime _calculateMaxDate() {
     final DateTime today = DateTime.now();
-    final DateTime nextWeekFriday = today.add(Duration(
-        days: ((5 - today.weekday) + 7) % 7 + 1)); // Next week's Friday
-    print(
-        'Max selectable date: ${DateFormat('yyyy-MM-dd').format(nextWeekFriday)}');
-    return nextWeekFriday;
-  }
-
-  /**
-   * Passes the selected date to the parent component.
-   */
-  useEffect() {
-    // Note: 'useEffect' is not used in Flutter. This function can be removed.
-    // The date passing is already handled in the onConfirm callback.
-  }
-
-  /**
-   * Passes the selected date to the parent component.
-   */
-  // Removed the unused useEffect
-
-  // Helper: Determine Booking Day based on current date
-  void _determineBookingDay() {
-    final DateTime today = DateTime.now();
-    final int currentDay = today.weekday; // 1 = Monday, 7 = Sunday
-    DateTime bookedDayDate;
-
-    if (currentDay >= 1 && currentDay <= 4) {
-      // Monday to Thursday: Book for the next day
-      bookedDayDate = today.add(Duration(days: 1));
-    } else if (currentDay == 5 || currentDay == 6) {
-      // Friday or Saturday: Book for Monday
-      int daysToAdd = 8 - currentDay; // Friday +3, Saturday +2
-      bookedDayDate = today.add(Duration(days: daysToAdd));
-    } else {
-      // Sunday: Book for Monday
-      bookedDayDate = today.add(Duration(days: 1));
+    int daysToAdd = 13 - today.weekday; // Up to Friday of next week
+    if (daysToAdd <= 0) {
+      daysToAdd += 7;
     }
-
-    String bookedDayName = DateFormat('EEEE').format(bookedDayDate);
-
-    setState(() {
-      _bookingDay = bookedDayName;
-      _isSunday = today.weekday == DateTime.sunday;
-
-      _isWednesday =
-          bookedDayDate.weekday == DateTime.wednesday; // Set Wednesday
-    });
-
-    // Debug Statements
-    print('Booking Day: $_bookingDay');
-    print('Is Sunday: $_isSunday');
-
-    print('Is Wednesday: $_isWednesday');
+    final DateTime maxDate = today.add(Duration(days: daysToAdd));
+    return maxDate;
   }
 
-  // Fetch Menu Data from API
-  Future<void> _fetchMenuData({DateTime? date}) async {
-    if (_jwtToken == null || _bookingDay.isEmpty) return;
+  List<DateTime> _getBlackoutDates() {
+    List<DateTime> blackoutDates = [];
+    DateTime startDate = DateTime.now();
+    DateTime endDate = _calculateMaxDate();
 
-    setState(() {
-      _isLoading = true;
-    });
-
-    // Format day to match backend expectations (e.g., lowercase)
-    String dayToFetch = date != null
-        ? DateFormat('EEEE').format(date).toLowerCase()
-        : _bookingDay.toLowerCase();
-
-    // Debug Statement
-    print('Fetching menu for: $dayToFetch');
-
-    final String apiUrl =
-        'https://www.backend.amddas.net/api/menus/menu/$dayToFetch';
-
-    try {
-      final response = await http.get(
-        Uri.parse(apiUrl),
-        headers: {
-          'Authorization': 'Bearer $_jwtToken',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      // Debug Statements
-      print('API Response Status: ${response.statusCode}');
-      print('API Response Body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        List<dynamic> data = json.decode(response.body);
-        setState(() {
-          _menuData = data;
-          _filterItems(_activeFilter);
-          _error = null;
-        });
-      } else if (response.statusCode == 403) {
-        setState(() {
-          _error = 'Session expired. Please log in again.';
-        });
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => LoginPage()),
-        );
-      } else {
-        setState(() {
-          _error = 'Failed to fetch menu data. Please try again.';
-          _filteredItems = [];
-          _selectedMenuId = null;
-        });
+    for (DateTime date = startDate;
+        date.isBefore(endDate.add(Duration(days: 1)));
+        date = date.add(Duration(days: 1))) {
+      if (date.weekday == DateTime.saturday ||
+          date.weekday == DateTime.sunday) {
+        blackoutDates.add(date);
       }
-    } catch (e) {
-      setState(() {
-        _error = 'An error occurred while fetching menu data.';
-        _filteredItems = [];
-        _selectedMenuId = null;
-      });
-      print('Error fetching menu data: $e');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
     }
+    return blackoutDates;
   }
 
-  // Handle OTP/Token Generation
   Future<void> _generateToken() async {
     if (_jwtToken == null || _selectedMenuId == null) {
       setState(() {
@@ -496,7 +587,6 @@ class _MenuPageState extends State<MenuPage>
       return;
     }
 
-    // Check if within allowed time
     if (!_isWithinAllowedTime()) {
       setState(() {
         _error = 'Token generation is only allowed between 12 PM to 8 PM.';
@@ -504,13 +594,32 @@ class _MenuPageState extends State<MenuPage>
       return;
     }
 
+    String formattedSelectedDate =
+        DateFormat('yyyy-MM-dd').format(_selectedDate!);
+    bool tokenExists =
+        _tokens.any((t) => t['validFor'] == formattedSelectedDate);
+    if (tokenExists) {
+      setState(() {
+        _error = 'You have already generated a token for the selected date.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Token already generated for this date.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
     setState(() {
+      _isGenerateButtonDisabled = true;
       _isLoading = true;
+      _error = null;
     });
 
     final String formattedDate =
         DateFormat('yyyy-MM-dd').format(_selectedDate!);
-    // Ensure dayToFetch is lowercase if backend expects it
     final String apiUrl =
         'https://www.backend.amddas.net/api/orders/submit?menuIds=$_selectedMenuId&quantities=1&deliveryDate=$formattedDate';
 
@@ -521,62 +630,46 @@ class _MenuPageState extends State<MenuPage>
           'Authorization': 'Bearer $_jwtToken',
           'Content-Type': 'application/json',
         },
-        body: json.encode({}), // Assuming no body needed
+        body: json.encode({}),
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        Map<String, dynamic> responseData = json.decode(response.body);
+      await _fetchLatestOrderId();
 
-        String tokenId = responseData['token']?.toString() ?? '';
-        String dateTimeToken = responseData['deliveryDate']?.toString() ?? '';
-
-        String formattedBookingDate = _formatDate(dateTimeToken);
-
-        setState(() {
-          _orderResponse = 'Order submitted successfully.';
-          _otpTokenId = tokenId;
-          _tokenn = tokenId;
-          _formattedDate = formattedBookingDate;
-          _isTokenGenerated = true;
-          _error = null;
-          _tokens.add({
-            'token': tokenId,
-            'validFor': formattedBookingDate,
-          });
-        });
-
-        await _fetchLatestOrderId();
-      } else if (response.statusCode == 403) {
-        setState(() {
-          _error = 'Session expired. Please log in again.';
-        });
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => LoginPage()),
-        );
-      } else {
-        setState(() {
-          _error = 'Failed to generate Token. Please try again.';
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'An error occurred while generating the Token.';
-      });
-      print('Error generating OTP: $e');
-    } finally {
       setState(() {
         _isLoading = false;
+        _isGenerateButtonDisabled = true;
+        _error = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Token generated successfully!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      print('Error generating token: $e');
+      setState(() {
+        _isLoading = false;
+        _isGenerateButtonDisabled = false;
+        _error = 'Failed to generate token. Please try again.';
       });
     }
   }
 
-  // Handle Token Cancellation
   Future<void> _cancelToken(String token, String deliveryDate) async {
-    if (_isSunday) {
+    if (_isTodaySunday) {
       setState(() {
         _error = 'Token cancellation is not allowed on Sundays.';
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Token cancellation is not allowed on Sundays.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
       return;
     }
 
@@ -584,6 +677,14 @@ class _MenuPageState extends State<MenuPage>
       setState(() {
         _error = 'Token cancellation is only allowed between 12 PM to 8 PM.';
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('Token cancellation is only allowed between 12 PM to 8 PM.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
       return;
     }
 
@@ -603,27 +704,50 @@ class _MenuPageState extends State<MenuPage>
       if (response.statusCode == 200) {
         setState(() {
           _tokens.removeWhere((t) => t['token'] == token);
-          _orderResponse = 'Your order has been cancelled successfully.';
-          _error = null;
+          _isGenerateButtonDisabled = _tokens.isNotEmpty;
+
+          if (_selectedDate != null &&
+              DateFormat('yyyy-MM-dd').format(_selectedDate!) == deliveryDate) {
+            _isGenerateButtonDisabled = false;
+          }
         });
 
-        if (_orderId != null) {
-          await _fetchOrderDetails(_orderId!);
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Token cancelled successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+
+        await _fetchLatestOrderId();
       } else {
         setState(() {
           _error = 'Failed to cancel order. Please try again.';
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to cancel order. Please try again.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
       setState(() {
         _error = 'An error occurred while cancelling the order.';
       });
       print('Error cancelling order: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('An error occurred while cancelling the order.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
   }
 
-  // Helper function to show confirmation dialog before cancelling token
   void _showCancelConfirmationDialog(String token, String deliveryDate) {
     showDialog(
       context: context,
@@ -651,483 +775,17 @@ class _MenuPageState extends State<MenuPage>
     );
   }
 
-  // Helper: Determine if within allowed time (12 PM to 8 PM)
   bool _isWithinAllowedTime() {
     final now = DateTime.now();
     final hour = now.hour;
     return hour >= 12 && hour < 20; // 12 PM to 8 PM
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (!_isInitialized) {
-      // Show loading indicator until initialization is complete
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(
-            'MENU',
-            style: GoogleFonts.josefinSans(
-                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32),
-          ),
-          centerTitle: true,
-          backgroundColor: Color.fromARGB(255, 41, 110, 61),
-        ),
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'MENU',
-          style: GoogleFonts.josefinSans(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 32),
-        ),
-        centerTitle: true,
-        backgroundColor:
-            Color.fromARGB(255, 41, 110, 61), // Set the AppBar background color
-      ),
-      body: Stack(
-        children: [
-          // Background image with gray overlay
-          Container(
-            decoration: BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('images/food.jpg'), // Your background image
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                    Colors.black.withOpacity(0.5), BlendMode.darken),
-              ),
-            ),
-          ),
-
-          // Main Content
-          SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // User Information Card
-                  Card(
-                    color: Colors.white.withOpacity(0.8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ListTile(
-                      leading: Icon(Icons.person, color: Colors.black),
-                      title: Text(
-                        'Email: $_email',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        'User ID: $_userId',
-                        style: TextStyle(fontSize: 14),
-                      ),
-                    ),
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Token Details Carousel
-                  if (_tokens.isNotEmpty)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Your Tokens:',
-                          style: GoogleFonts.josefinSans(
-                              fontSize: 20,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold),
-                        ),
-                        SizedBox(height: 10),
-                        CarouselSlider.builder(
-                          itemCount: _tokens.length,
-                          itemBuilder:
-                              (BuildContext context, int index, int realIdx) {
-                            var token = _tokens[index];
-                            return Card(
-                              color: Colors.white.withOpacity(0.8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Token ID: ${token['token']}',
-                                      style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                    SizedBox(height: 10),
-                                    Text(
-                                      'Valid For: ${token['validFor']}',
-                                      style: TextStyle(fontSize: 16),
-                                    ),
-                                    SizedBox(height: 20),
-                                    // Disable the cancel button if today is Sunday
-                                    if (!_isSunday)
-                                      ElevatedButton.icon(
-                                        onPressed: () {
-                                          _showCancelConfirmationDialog(
-                                              token['token'],
-                                              token['validFor']);
-                                        },
-                                        icon: Icon(Icons.delete),
-                                        label: Text('Cancel Token'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      )
-                                    else
-                                      Text(
-                                        'Token cannot be cancelled on Sundays',
-                                        style: TextStyle(
-                                          color: Colors.red,
-                                          fontStyle: FontStyle.italic,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                          options: CarouselOptions(
-                            height: 200.0,
-                            enlargeCenterPage: true,
-                            autoPlay: true,
-                            aspectRatio: 16 / 9,
-                            autoPlayCurve: Curves.fastOutSlowIn,
-                            enableInfiniteScroll: true,
-                            autoPlayAnimationDuration:
-                                Duration(milliseconds: 1500),
-                            viewportFraction: 0.8,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                  SizedBox(height: 20),
-
-                  // Date Picker Section using flutter_datetime_picker_plus
-                  Card(
-                    color: Colors.white.withOpacity(0.8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: Icon(Icons.calendar_today),
-                            title: Text(
-                              _selectedDate == null
-                                  ? 'Select Delivery Date'
-                                  : 'Delivery Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}',
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: _selectedDate != null
-                                ? Text(
-                                    'Day: ${DateFormat('EEEE').format(_selectedDate!)}',
-                                    style: TextStyle(
-                                        fontSize: 14, color: Colors.grey[700]),
-                                  )
-                                : null,
-                            trailing: Icon(Icons.arrow_forward_ios),
-                            onTap: _selectDate,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Menu Title
-                  Text(
-                    'Booking for $_bookingDay Menu',
-                    style: GoogleFonts.josefinSans(
-                        fontSize: 24, color: Colors.white),
-                    textAlign: TextAlign.center,
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Dropdown for Menu Types
-                  DropdownButtonFormField<String>(
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.8),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    ),
-                    value: _activeFilter,
-                    items:
-                        <String>['Veg', 'Egg', 'Non-Veg'].map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      if (newValue != null) {
-                        // Check availability before applying filter
-                        if (newValue == 'Veg' && !_isVegAvailable()) {
-                          setState(() {
-                            _error =
-                                'Vegetarian menu is not available on Sundays.';
-                          });
-                          return;
-                        }
-                        if (newValue == 'Egg' && !_isEggAvailable()) {
-                          setState(() {
-                            _error = 'Eggetarian menu is not available today.';
-                          });
-                          return;
-                        }
-                        if (newValue == 'Non-Veg' && !_isNonVegAvailable()) {
-                          setState(() {
-                            _error =
-                                'Non-Vegetarian menu is not available today.';
-                          });
-                          return;
-                        }
-                        _filterItems(newValue);
-                        setState(() {
-                          _error = null; // Clear previous errors
-                        });
-                      }
-                    },
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Menu List
-                  _isLoading
-                      ? Center(child: CircularProgressIndicator())
-                      : _filteredItems.isNotEmpty
-                          ? ListView.builder(
-                              shrinkWrap: true,
-                              physics: NeverScrollableScrollPhysics(),
-                              itemCount: _filteredItems.length,
-                              itemBuilder: (context, index) {
-                                var menuItem = _filteredItems[index];
-                                var itemName = menuItem['item']?['itemName'] ??
-                                    'Unnamed Item';
-                                var categoryName = menuItem['item']?['category']
-                                        ?['categoryName'] ??
-                                    'Uncategorized';
-
-                                // Debug Statement
-                                print('Displaying Menu Item: $itemName');
-
-                                return Card(
-                                  color: Colors.white.withOpacity(0.8),
-                                  margin: EdgeInsets.symmetric(vertical: 5),
-                                  child: ListTile(
-                                    title: Text(
-                                      itemName,
-                                      style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                    subtitle: Text(
-                                      'Category: $categoryName',
-                                      style: TextStyle(fontSize: 16),
-                                    ),
-                                  ),
-                                );
-                              },
-                            )
-                          : Center(
-                              child: Text(
-                                _error != null
-                                    ? _error!
-                                    : 'No items found for $_activeFilter.',
-                                style:
-                                    TextStyle(color: Colors.red, fontSize: 16),
-                              ),
-                            ),
-
-                  SizedBox(height: 20),
-
-                  // Generate Token Button
-                  ElevatedButton(
-                    onPressed: (_isSunday ||
-                            (_selectedDate != null &&
-                                _tokens.any((t) =>
-                                    t['validFor'] ==
-                                    DateFormat('yyyy-MM-dd')
-                                        .format(_selectedDate!))) ||
-                            !_isWithinAllowedTime())
-                        ? null
-                        : _generateToken,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: (_isSunday ||
-                              (_selectedDate != null &&
-                                  _tokens.any((t) =>
-                                      t['validFor'] ==
-                                      DateFormat('yyyy-MM-dd')
-                                          .format(_selectedDate!))) ||
-                              !_isWithinAllowedTime())
-                          ? Colors.grey
-                          : Color(0xFFFC8019),
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 80, vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text(
-                      (_selectedDate != null &&
-                              _tokens.any((t) =>
-                                  t['validFor'] ==
-                                  DateFormat('yyyy-MM-dd')
-                                      .format(_selectedDate!)))
-                          ? 'Token Already Generated'
-                          : _isSunday
-                              ? 'Booking Not Allowed Today'
-                              : !_isWithinAllowedTime()
-                                  ? 'Generate Token (Unavailable)'
-                                  : 'Generate Token',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ),
-
-                  SizedBox(height: 20),
-
-                  // Order Response
-                  if (_orderResponse != null)
-                    Card(
-                      color: Colors.white.withOpacity(0.8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            Text(
-                              _orderResponse!,
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(height: 10),
-                            Text('Token ID: $_tokenn'),
-                            Text('Valid For: $_formattedDate'),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                  // Error Message
-                  if (_error != null)
-                    Container(
-                      padding: EdgeInsets.all(10),
-                      color: Colors.red.withOpacity(0.7),
-                      child: Row(
-                        children: [
-                          Icon(Icons.error, color: Colors.white),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 16),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  SizedBox(height: 20),
-                ],
-              ),
-            ),
-          ),
-
-          // Positioned Floating Notification Icon
-          Positioned(
-            bottom: 80, // Above the bottom navbar
-            right: 20,
-            child: AnimatedBuilder(
-              animation: _animation,
-              builder: (context, child) {
-                return Transform.translate(
-                  offset: Offset(0, _animation.value),
-                  child: GestureDetector(
-                    onTap: _showBookingInfo,
-                    child: Container(
-                      padding: EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.notifications_active,
-                          color: Colors.red, size: 30),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-
-      // Bottom Navigation Bar
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.5), // Transparent background
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
-          ),
-        ),
-        child: BottomNavigationBar(
-          backgroundColor: Colors.transparent, // Transparent background
-          elevation: 0,
-          currentIndex: 0, // Menu page is active
-          selectedItemColor: Color(0xFFFC8019), // Pumpkin color for active tab
-          unselectedItemColor: Colors.white, // White color for inactive tab
-          onTap: (index) {
-            if (index == 1) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => UserPage()),
-              );
-            }
-          },
-          items: [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.restaurant_menu),
-              label: 'Menu',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: 'User',
-            ),
-          ],
-          type: BottomNavigationBarType.fixed,
-        ),
-      ),
-    );
+  Future<void> _refreshPage() async {
+    await _fetchLatestOrderId();
+    await _fetchMenuData();
   }
 
-  // Show Booking Information Dialog
   void _showBookingInfo() {
     showDialog(
       context: context,
@@ -1135,7 +793,7 @@ class _MenuPageState extends State<MenuPage>
         return AlertDialog(
           title: Text('Booking Information'),
           content: Text(
-            'Booking is allowed from 12 PM to 8 PM.\n'
+            'Booking is allowed from:\n 12 PM to 8 PM.\n'
             'Check the menu after 7:30 PM.\n'
             'Please check the local holidays before booking.',
           ),
@@ -1152,21 +810,654 @@ class _MenuPageState extends State<MenuPage>
     );
   }
 
-  // Helper: Determine if Veg filter is available
-  bool _isVegAvailable() {
-    // Veg is available unless it's Sunday
-    return !_isSunday;
+  List<DropdownMenuItem<String>> _getMenuDropdownItems() {
+    return _menuTypes.map((String value) {
+      return DropdownMenuItem<String>(
+        value: value,
+        child: Text(value),
+      );
+    }).toList();
   }
 
-  // Helper: Determine if Egg filter is available
-  bool _isEggAvailable() {
-    // Egg is available on Tuesday and Wednesday
-    return _isWednesday;
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Background image covering entire screen
+            Container(
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('images/food.jpg'),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    Colors.black.withOpacity(0.6),
+                    BlendMode.darken,
+                  ),
+                ),
+              ),
+            ),
+            // Main content with curved header
+            Column(
+              children: [
+                // Custom Curved Header
+                Stack(
+                  children: [
+                    ClipPath(
+                      clipper: HeaderClipper(),
+                      child: Container(
+                        height: 150,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Color.fromARGB(255, 41, 110, 61).withOpacity(0.9),
+                              Color.fromARGB(255, 58, 190, 96).withOpacity(0.9),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 40, vertical: 40),
+                      child: Align(
+                        alignment:
+                            Alignment.centerLeft, // Move to the start (left)
+                        child: Text(
+                          'MENU',
+                          style: GoogleFonts.playfairDisplay(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 34,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                // Expandable content area
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _refreshPage,
+                    child: SingleChildScrollView(
+                      physics: AlwaysScrollableScrollPhysics(),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Token Details Section
+                            if (_tokens.isNotEmpty)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Your Tokens',
+                                    style: GoogleFonts.merriweather(
+                                      fontSize: 24,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                      shadows: [
+                                        Shadow(
+                                          offset: Offset(1, 1),
+                                          blurRadius: 3.0,
+                                          color: Colors.black.withOpacity(0.5),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(height: 10),
+                                  // Token Carousel
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(Icons.arrow_back,
+                                            color: Colors.white),
+                                        onPressed: () {
+                                          if (_tokens.isNotEmpty) {
+                                            if (_currentPageIndex > 0) {
+                                              _currentPageIndex--;
+                                            } else {
+                                              _currentPageIndex =
+                                                  _tokens.length - 1;
+                                            }
+                                            _pageController.animateToPage(
+                                              _currentPageIndex,
+                                              duration:
+                                                  Duration(milliseconds: 300),
+                                              curve: Curves.easeIn,
+                                            );
+                                          }
+                                        },
+                                      ),
+                                      Expanded(
+                                        child: SizedBox(
+                                          height: 200,
+                                          child: PageView.builder(
+                                            controller: _pageController,
+                                            itemCount: _tokens.length,
+                                            onPageChanged: (index) {
+                                              setState(() {
+                                                _currentPageIndex = index;
+                                              });
+                                            },
+                                            itemBuilder: (context, index) {
+                                              var token = _tokens[index];
+                                              return Card(
+                                                color: Colors.white
+                                                    .withOpacity(0.9),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(15),
+                                                  side: BorderSide(
+                                                    color: Colors.white
+                                                        .withOpacity(0.2),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                elevation: 4,
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(
+                                                      16.0),
+                                                  child: Column(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Text(
+                                                        'Token ID: ${token['token']}',
+                                                        style: GoogleFonts
+                                                            .sourceSans3(
+                                                          fontSize: 20,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Color.fromARGB(
+                                                              255, 41, 110, 61),
+                                                        ),
+                                                      ),
+                                                      SizedBox(height: 10),
+                                                      Text(
+                                                        'Valid For: ${token['validFor']}',
+                                                        style: GoogleFonts
+                                                            .sourceSans3(
+                                                          fontSize: 16,
+                                                          color: Colors.black87,
+                                                        ),
+                                                      ),
+                                                      SizedBox(height: 20),
+                                                      if (!_isTodaySunday)
+                                                        IconButton(
+                                                          icon: Icon(
+                                                              Icons.delete,
+                                                              color: Colors
+                                                                  .red[700]),
+                                                          onPressed: () {
+                                                            _showCancelConfirmationDialog(
+                                                              token['token'],
+                                                              token['validFor'],
+                                                            );
+                                                          },
+                                                        )
+                                                      else
+                                                        Text(
+                                                          'Token cannot be cancelled on Sundays',
+                                                          style: GoogleFonts
+                                                              .sourceSans3(
+                                                            color:
+                                                                Colors.red[700],
+                                                            fontStyle: FontStyle
+                                                                .italic,
+                                                          ),
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.arrow_forward,
+                                            color: Colors.white),
+                                        onPressed: () {
+                                          if (_tokens.isNotEmpty) {
+                                            if (_currentPageIndex <
+                                                _tokens.length - 1) {
+                                              _currentPageIndex++;
+                                            } else {
+                                              _currentPageIndex = 0;
+                                            }
+                                            _pageController.animateToPage(
+                                              _currentPageIndex,
+                                              duration:
+                                                  Duration(milliseconds: 300),
+                                              curve: Curves.easeIn,
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+
+                            SizedBox(height: 25),
+
+                            // Date Picker Card
+                            Card(
+                              color: Colors.white.withOpacity(0.9),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                side: BorderSide(
+                                  color: Colors.white.withOpacity(0.2),
+                                  width: 1,
+                                ),
+                              ),
+                              elevation: 4,
+                              child: ListTile(
+                                leading: Icon(Icons.calendar_today,
+                                    color: Color.fromARGB(255, 41, 110, 61)),
+                                title: Text(
+                                  _selectedDate == null
+                                      ? 'Select Delivery Date'
+                                      : 'Delivery Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}',
+                                  style: GoogleFonts.sourceSans3(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: _selectedDate != null
+                                    ? Text(
+                                        'Day: ${DateFormat('EEEE').format(_selectedDate!)}',
+                                        style: GoogleFonts.sourceSans3(
+                                            fontSize: 14,
+                                            color: Colors.grey[700]),
+                                      )
+                                    : null,
+                                trailing: Icon(Icons.arrow_forward_ios,
+                                    color: Color.fromARGB(255, 41, 110, 61)),
+                                onTap: () => _selectDate(context),
+                              ),
+                            ),
+
+                            SizedBox(height: 25),
+
+                            // Menu Title
+                            Text(
+                              'Booking for $_bookingDay Menu',
+                              style: GoogleFonts.merriweather(
+                                  fontSize: 26,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                  shadows: [
+                                    Shadow(
+                                      offset: Offset(1, 1),
+                                      blurRadius: 3.0,
+                                      color: Colors.black.withOpacity(0.5),
+                                    ),
+                                  ]),
+                              textAlign: TextAlign.center,
+                            ),
+
+                            SizedBox(height: 20),
+
+                            // Dropdown for Menu Types
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(15),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 4,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: DropdownButtonFormField<String>(
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: Colors.white.withOpacity(0.9),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 20, vertical: 16),
+                                ),
+                                hint: Text('Select menu type'), // Added hint
+                                value: _activeFilter,
+                                items: _getMenuDropdownItems(),
+                                onChanged: (String? newValue) {
+                                  setState(() {
+                                    _activeFilter = newValue;
+                                    _error = null;
+                                    if (newValue != null) {
+                                      _filterItems(newValue);
+                                    } else {
+                                      _filteredItems = [];
+                                    }
+                                  });
+                                },
+                                style: GoogleFonts.sourceSans3(
+                                    color: Colors.black87,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500),
+                              ),
+                            ),
+
+                            SizedBox(height: 20),
+
+                            // Menu List
+                            _isLoading
+                                ? Center(
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Color.fromARGB(255, 41, 110, 61)),
+                                    ),
+                                  )
+                                : _activeFilter == null
+                                    ? Center(
+                                        child: Text(
+                                          'Please select a menu type to view items.',
+                                          style: GoogleFonts.sourceSans3(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500),
+                                        ),
+                                      )
+                                    : _filteredItems.isNotEmpty
+                                        ? ListView.builder(
+                                            shrinkWrap: true,
+                                            physics:
+                                                NeverScrollableScrollPhysics(),
+                                            itemCount: _filteredItems.length,
+                                            itemBuilder: (context, index) {
+                                              var menuItem =
+                                                  _filteredItems[index];
+                                              var itemName = menuItem['item']
+                                                      ?['itemName'] ??
+                                                  'Unnamed Item';
+
+                                              return Card(
+                                                color: Colors.white
+                                                    .withOpacity(0.9),
+                                                margin: EdgeInsets.symmetric(
+                                                    vertical: 6),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  side: BorderSide(
+                                                    color: Colors.white
+                                                        .withOpacity(0.2),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                elevation: 3,
+                                                child: ListTile(
+                                                  title: Text(
+                                                    itemName,
+                                                    style:
+                                                        GoogleFonts.sourceSans3(
+                                                            fontSize: 18,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color:
+                                                                Colors.black87),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          )
+                                        : Center(
+                                            child: Text(
+                                              _error != null
+                                                  ? _error!
+                                                  : 'No items found for $_activeFilter.',
+                                              style: GoogleFonts.sourceSans3(
+                                                  color: Colors.red[300],
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w500),
+                                            ),
+                                          ),
+
+                            SizedBox(height: 25),
+
+                            // Generate Token Button
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 4,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: ElevatedButton(
+                                onPressed: (_isTodaySunday ||
+                                        _activeFilter ==
+                                            null || // Ensure a filter is selected
+                                        (_selectedDate != null &&
+                                            _tokens.any((t) =>
+                                                t['validFor'] ==
+                                                DateFormat('yyyy-MM-dd')
+                                                    .format(_selectedDate!))) ||
+                                        !_isWithinAllowedTime() ||
+                                        _isGenerateButtonDisabled)
+                                    ? null
+                                    : _generateToken,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: (_isTodaySunday ||
+                                          _activeFilter ==
+                                              null || // Ensure a filter is selected
+                                          (_selectedDate != null &&
+                                              _tokens.any((t) =>
+                                                  t['validFor'] ==
+                                                  DateFormat('yyyy-MM-dd')
+                                                      .format(
+                                                          _selectedDate!))) ||
+                                          !_isWithinAllowedTime() ||
+                                          _isGenerateButtonDisabled)
+                                      ? Colors.grey[400]
+                                      : Color.fromARGB(255, 41, 110, 61),
+                                  disabledBackgroundColor: Colors.grey[400],
+                                  disabledForegroundColor: Colors.grey[700],
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 80, vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Text(
+                                  (_selectedDate != null &&
+                                          _tokens.any((t) =>
+                                              t['validFor'] ==
+                                              DateFormat('yyyy-MM-dd')
+                                                  .format(_selectedDate!)))
+                                      ? 'Token Already Generated'
+                                      : _isTodaySunday
+                                          ? 'Booking Not Allowed Today'
+                                          : !_isWithinAllowedTime()
+                                              ? 'Generate Token (Unavailable)'
+                                              : 'Generate Token',
+                                  style: GoogleFonts.sourceSans3(
+                                    color: (_isTodaySunday ||
+                                            _activeFilter ==
+                                                null || // Ensure a filter is selected
+                                            (_selectedDate != null &&
+                                                _tokens.any((t) =>
+                                                    t['validFor'] ==
+                                                    DateFormat('yyyy-MM-dd')
+                                                        .format(
+                                                            _selectedDate!))) ||
+                                            !_isWithinAllowedTime() ||
+                                            _isGenerateButtonDisabled)
+                                        ? Colors.grey[700]
+                                        : Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            if (_isGenerateButtonDisabled)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                child: Text(
+                                  'Please check your token section for the generated token.',
+                                  style: GoogleFonts.sourceSans3(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500),
+                                ),
+                              ),
+
+                            // Error Message
+                            if (_error != null)
+                              Container(
+                                padding: EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.error, color: Colors.white),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        _error!,
+                                        style: GoogleFonts.sourceSans3(
+                                            color: Colors.white, fontSize: 16),
+                                      ),
+                                    )
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            // Floating Notification Icon
+            Positioned(
+              bottom: 80,
+              right: 20,
+              child: AnimatedBuilder(
+                animation: _animation,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(0, _animation.value),
+                    child: GestureDetector(
+                      onTap: _showBookingInfo,
+                      child: Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.notifications_active,
+                          color: Colors.red,
+                          size: 30,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _buildBottomNavigationBar(),
+      ),
+    );
   }
 
-  // Helper: Determine if Non-Veg filter is available
-  bool _isNonVegAvailable() {
-    // Non-Veg is available on Tuesday and Wednesday
-    return _isWednesday;
+  // Build Bottom Navigation Bar
+  Widget _buildBottomNavigationBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.5),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(0),
+          topRight: Radius.circular(0),
+        ),
+      ),
+      child: BottomNavigationBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        currentIndex: _currentIndex,
+        selectedItemColor: Color(0xFFFC8019),
+        unselectedItemColor: Colors.white,
+        onTap: _handleNavigation,
+        items: [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.restaurant_menu),
+            label: 'Menu',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'User',
+          ),
+        ],
+        type: BottomNavigationBarType.fixed,
+      ),
+    );
   }
+}
+
+/// Custom Clipper for Header
+class HeaderClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    Path path = Path();
+    // Starting point
+    path.lineTo(0, size.height - 60);
+    // Single curve as in UserPage
+    path.quadraticBezierTo(
+      size.width / 4,
+      size.height,
+      size.width / 2,
+      size.height - 40,
+    );
+    // Continuing to the top-right
+    path.lineTo(size.width, size.height - 120);
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

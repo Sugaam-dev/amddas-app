@@ -2,7 +2,6 @@ name: amddasfoods
 description: "A new Flutter project."
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 1.2.0+3
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -23,6 +22,8 @@ dependencies:
   flutter_datetime_picker: ^1.5.1 # New DateTime Picker Package
   provider:
   syncfusion_flutter_datepicker:
+  lottie:
+  flip_card:
 
   # Add other dependencies below
   flutter_native_splash: 
@@ -68,3 +69,5 @@ flutter:
     - gif/confirmotp.gif
     - images/food.jpg
     - images/borg.png
+    - images/thali.jpg
+    - images/fodwal.jpg

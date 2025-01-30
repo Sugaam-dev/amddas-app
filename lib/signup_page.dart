@@ -28,7 +28,7 @@ class _SignUpPageState extends State<SignUpPage> {
     return await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: Text('Exit App?'),
+            title: Text('Exit App!'),
             content: Text('Do you want to exit the application?'),
             actions: [
               TextButton(

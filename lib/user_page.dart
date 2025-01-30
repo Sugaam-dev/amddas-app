@@ -67,7 +67,7 @@ class _UserPageState extends State<UserPage> {
     return await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: Text('Exit App?'),
+            title: Text('Exit App!'),
             content: Text('Do you want to exit the application?'),
             actions: [
               TextButton(
@@ -230,33 +230,33 @@ class _UserPageState extends State<UserPage> {
     );
   }
 
-  // Function to launch the phone dialer
-  void _callUs() async {
-    final Uri phoneUri = Uri(scheme: 'tel', path: '09632764963');
-    if (await canLaunchUrl(phoneUri)) {
-      await launchUrl(phoneUri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not launch the phone dialer')),
-      );
-    }
-  }
+  // // Function to launch the phone dialer
+  // void _callUs() async {
+  //   final Uri phoneUri = Uri(scheme: 'tel', path: '09632764963');
+  //   if (await canLaunchUrl(phoneUri)) {
+  //     await launchUrl(phoneUri);
+  //   } else {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Could not launch the phone dialer')),
+  //     );
+  //   }
+  // }
 
-  // Function to open email client
-  void _mailUs() async {
-    final Uri emailUri = Uri(
-      scheme: 'mailto',
-      path: 'info@amddas.net',
-      query: 'subject=Customer%20Inquiry',
-    );
-    if (await canLaunchUrl(emailUri)) {
-      await launchUrl(emailUri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not launch the email app')),
-      );
-    }
-  }
+  // // Function to open email client
+  // void _mailUs() async {
+  //   final Uri emailUri = Uri(
+  //     scheme: 'mailto',
+  //     path: 'info@amddas.net',
+  //     query: 'subject=Customer%20Inquiry',
+  //   );
+  //   if (await canLaunchUrl(emailUri)) {
+  //     await launchUrl(emailUri);
+  //   } else {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Could not launch the email app')),
+  //     );
+  //   }
+  // }
 
   void _showBookingInfo() {
     showDialog(
@@ -311,203 +311,181 @@ class _UserPageState extends State<UserPage> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop, // Set the back button handler
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: Stack(
-          children: [
-            // Custom Header with Curved Shape and Gradient
-            ClipPath(
-              clipper: HeaderClipper(),
-              child: Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color.fromARGB(255, 41, 110, 61),
-                      Color.fromARGB(255, 58, 190, 96)
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Stack(
+        children: [
+          // Custom Header with Curved Shape and Gradient
+          ClipPath(
+            clipper: HeaderClipper(),
+            child: Container(
+              height: 200,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color.fromARGB(255, 41, 110, 61),
+                    Color.fromARGB(255, 58, 190, 96)
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // User Info on the Left
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Hello Foodie',
-                            style: TextStyle(
-                              fontSize: 24,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
+              ),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // User Info on the Left
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Hello Foodie',
+                          style: TextStyle(
+                            fontSize: 24,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
                           ),
-                          SizedBox(height: 5),
-                          Text(
-                            userEmail,
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white70,
-                            ),
+                        ),
+                        SizedBox(height: 5),
+                        Text(
+                          userEmail,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white70,
                           ),
-                        ],
-                      ),
-                      SizedBox(
-                          width: 50), // Adds space between the text and avatar
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(
+                        width: 50), // Adds space between the text and avatar
+                  ],
                 ),
               ),
             ),
-            // Positioned CircleAvatar to show half-outside the header section
-            // Positioned CircleAvatar with Outer Dark Green Border
-            Positioned(
-              top:
-                  60, // Adjust to position the avatar halfway outside the header
-              right: 20,
-              child: Container(
-                padding: EdgeInsets.all(4), // Border thickness
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      Color.fromARGB(255, 36, 163, 72),
-                      Color.fromARGB(255, 58, 190, 96)
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ), // Dark green border color
-                ),
-                child: CircleAvatar(
-                  radius: 50,
-                  backgroundImage: AssetImage(
-                      'images/amd.png'), // Replace with actual image path
-                ),
+          ),
+          // Positioned CircleAvatar to show half-outside the header section
+          // Positioned CircleAvatar with Outer Dark Green Border
+          Positioned(
+            top: 60, // Adjust to position the avatar halfway outside the header
+            right: 20,
+            child: Container(
+              padding: EdgeInsets.all(4), // Border thickness
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    Color.fromARGB(255, 36, 163, 72),
+                    Color.fromARGB(255, 58, 190, 96)
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ), // Dark green border color
+              ),
+              child: CircleAvatar(
+                radius: 50,
+                backgroundImage: AssetImage(
+                    'images/amd.png'), // Replace with actual image path
               ),
             ),
-            // Main content below the header
-            Padding(
-              padding: const EdgeInsets.only(top: 250.0),
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                children: [
-                  // Section Title "My Account"
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10.0),
-                    child: Text(
-                      "My Account",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
+          ),
+          // Main content below the header
+          Padding(
+            padding: const EdgeInsets.only(top: 250.0),
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              children: [
+                // Section Title "My Account"
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10.0),
+                  child: Text(
+                    "My Account",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
                   ),
+                ),
+                UserInfoTile(
+                  icon: Icons.person_outline,
+                  title: 'Manage Profile',
+                  onTap: () {
+                    setState(() {
+                      _isManageProfileExpanded = !_isManageProfileExpanded;
+                    });
+                  },
+                ),
+                // Show "Delete Account" if _isManageProfileExpanded is true
+                if (_isManageProfileExpanded)
                   UserInfoTile(
-                    icon: Icons.person_outline,
-                    title: 'Manage Profile',
-                    onTap: () {
-                      setState(() {
-                        _isManageProfileExpanded = !_isManageProfileExpanded;
-                      });
-                    },
-                  ),
-                  // Show "Delete Account" if _isManageProfileExpanded is true
-                  if (_isManageProfileExpanded)
-                    UserInfoTile(
-                      icon: Icons.delete_forever,
-                      title: 'Delete Account',
-                      onTap: () => _showDeleteConfirmationDialog(context),
-                      titleColor: Colors.red,
-                    ),
-                  Divider(),
-
-                  SizedBox(height: 30),
-
-                  // Section Title "Others"
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10.0),
-                    child: Text(
-                      "Others",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                  UserInfoTile(
-                    icon: Icons.notifications_outlined,
-                    title: 'Notification',
-                    onTap: _showBookingInfo,
-                  ),
-                  Divider(),
-                  UserInfoTile(
-                    icon: Icons.book,
-                    title: 'Privacy Policy',
-                    onTap: _launchPrivacyPolicy,
-                  ),
-                  Divider(),
-                  UserInfoTile(
-                      icon: Icons.contact_page,
-                      title: 'Contact-Us',
-                      onTap: () {
-                        setState(() {
-                          _isManageProfileExpand = !_isManageProfileExpand;
-                        });
-                      }),
-                  if (_isManageProfileExpand)
-                    UserInfoTile(
-                      icon: Icons.phone_android_outlined,
-                      title: 'Call Us - 09632764963 ',
-                      onTap: _callUs, // Launch phone dialer
-                    ),
-                  if (_isManageProfileExpand)
-                    UserInfoTile(
-                      icon: Icons.mail,
-                      title: 'Mail us - info@amddas.net',
-                      onTap: _mailUs, // Launch email app
-                    ),
-
-                  Divider(),
-                  UserInfoTile(
-                    icon: Icons.logout,
-                    title: 'Logout',
-                    onTap: _showLogoutConfirmationDialog,
+                    icon: Icons.delete_forever,
+                    title: 'Delete Account',
+                    onTap: () => _showDeleteConfirmationDialog(context),
                     titleColor: Colors.red,
                   ),
-                ],
-              ),
+                Divider(),
+
+                SizedBox(height: 30),
+
+                // Section Title "Others"
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10.0),
+                  child: Text(
+                    "Others",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                UserInfoTile(
+                  icon: Icons.notifications_outlined,
+                  title: 'Notification',
+                  onTap: _showBookingInfo,
+                ),
+                Divider(),
+                UserInfoTile(
+                  icon: Icons.book,
+                  title: 'Privacy Policy',
+                  onTap: _launchPrivacyPolicy,
+                ),
+                Divider(),
+                UserInfoTile(
+                    icon: Icons.contact_page,
+                    title: 'Contact-Us',
+                    onTap: () {
+                      setState(() {
+                        _isManageProfileExpand = !_isManageProfileExpand;
+                      });
+                    }),
+                if (_isManageProfileExpand)
+                  UserInfoTile(
+                    icon: Icons.phone_android_outlined,
+                    title: 'Call Us - 09632764963 ',
+                    // onTap: _callUs, // Launch phone dialer
+                  ),
+                if (_isManageProfileExpand)
+                  UserInfoTile(
+                    icon: Icons.mail,
+                    title: 'Mail us - info@amddas.net',
+                    // onTap: _mailUs, // Launch email app
+                  ),
+
+                Divider(),
+                UserInfoTile(
+                  icon: Icons.logout,
+                  title: 'Logout',
+                  onTap: _showLogoutConfirmationDialog,
+                  titleColor: Colors.red,
+                ),
+              ],
             ),
-          ],
-        ),
-        bottomNavigationBar: BottomNavigationBar(
-          backgroundColor: Colors.black.withOpacity(0.5),
-          currentIndex: _currentIndex,
-          selectedItemColor: Color(0xFFFC8019),
-          unselectedItemColor: Colors.white,
-          onTap: _handleNavigation,
-          items: [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.restaurant_menu),
-              label: 'Menu',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: 'User',
-            ),
-          ],
-          type: BottomNavigationBarType.fixed,
-        ),
+          ),
+        ],
       ),
     );
   }

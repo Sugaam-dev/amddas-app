@@ -4,6 +4,7 @@ import 'login_page.dart'; // Import the Login Page
 import 'menu_page.dart'; // Import the Menu Page
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Import flutter_secure_storage
 import 'package:google_fonts/google_fonts.dart';
+import 'home_page.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -34,7 +35,7 @@ class _SplashScreenState extends State<SplashScreen> {
       // Token exists, navigate to MenuPage
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => MenuPage()),
+        MaterialPageRoute(builder: (context) => HomePage()),
       );
     } else {
       // No token found, navigate to LoginPage

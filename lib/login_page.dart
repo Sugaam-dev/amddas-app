@@ -3,11 +3,13 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Import flutter_secure_storage
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/services.dart';
+import 'package:lottie/lottie.dart';
 import 'forgot_password_page.dart';
 import 'signup_page.dart';
-import 'menu_page.dart';
+// import 'menu_page.dart';
+import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
   @override
@@ -15,12 +17,9 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // Initialize controllers
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-
-  // Initialize flutter_secure_storage
   final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
   bool _isLoading = false;
@@ -38,7 +37,7 @@ class _LoginPageState extends State<LoginPage> {
     return await showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: Text('Exit App?'),
+            title: Text('Exit Application!'),
             content: Text('Do you want to exit the application?'),
             actions: [
               TextButton(
@@ -49,7 +48,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Text('Yes'),
                 onPressed: () {
                   Navigator.of(context).pop(true);
-                  SystemNavigator.pop(); // Exit the app
+                  SystemNavigator.pop();
                 },
               ),
             ],
@@ -62,10 +61,8 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _checkLoginStatus() async {
     String? token = await _secureStorage.read(key: 'jwt_token');
     if (token != null && !JwtDecoder.isExpired(token)) {
-      print('Existing valid token found: $token');
-      // Token exists and is valid, navigate to MenuPage
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => MenuPage()),
+        MaterialPageRoute(builder: (context) => HomePage()),
       );
     } else {
       if (token != null) {
@@ -101,60 +98,29 @@ class _LoginPageState extends State<LoginPage> {
       });
 
       try {
-        print('Sending login request...');
         final response = await http.put(
           url,
           headers: {'Content-Type': 'application/json'},
           body: body,
         );
 
-        print('Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
-
         if (response.statusCode == 200) {
-          final token = response
-              .body; // Assuming the token is directly in the response body
-          print('Received token: $token');
-
-          // Decode the JWT
+          final token = response.body;
           Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
-          print('Decoded token: $decodedToken');
 
-          // Extract email and user ID from the token
           String? userEmail = decodedToken['sub'] ??
               decodedToken['email'] ??
               decodedToken['userEmail'];
           String? userId = decodedToken['userId'] ?? decodedToken['user_id'];
 
-          print('Extracted email: $userEmail');
-          print('Extracted userId: $userId');
-
-          if (userEmail == null) {
-            print(
-                'Warning: Unable to extract email from token. Token payload: $decodedToken');
-            userEmail = _emailController.text.trim();
-          }
-
-          // Store the token and user info securely
           await _secureStorage.write(key: 'jwt_token', value: token);
           await _secureStorage.write(key: 'user_email', value: userEmail);
           if (userId != null) {
             await _secureStorage.write(key: 'user_id', value: userId);
           }
 
-          // Optionally, verify stored data
-          String? storedToken = await _secureStorage.read(key: 'jwt_token');
-          String? storedEmail = await _secureStorage.read(key: 'user_email');
-          String? storedUserId = await _secureStorage.read(key: 'user_id');
-
-          print('Stored token: $storedToken');
-          print('Stored email: $storedEmail');
-          print('Stored userId: $storedUserId');
-
-          // Navigate to MenuPage
-          print('Navigating to MenuPage...');
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => MenuPage()),
+            MaterialPageRoute(builder: (context) => HomePage()),
           );
         } else if (response.statusCode == 401) {
           setState(() {
@@ -167,9 +133,8 @@ class _LoginPageState extends State<LoginPage> {
         }
       } catch (error) {
         setState(() {
-          _error = "Details don’t match! Try again or sign up.";
+          _error = "Details don't match! Try again or sign up.";
         });
-        print('Error during login: $error');
       } finally {
         setState(() {
           _isLoading = false;
@@ -187,7 +152,6 @@ class _LoginPageState extends State<LoginPage> {
         body: SingleChildScrollView(
           child: Column(
             children: [
-              // Header Section
               Stack(
                 children: [
                   ClipPath(
@@ -226,7 +190,6 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ],
               ),
-              // Main Content Section
               Padding(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 16.0, vertical: 20.0),
@@ -234,8 +197,8 @@ class _LoginPageState extends State<LoginPage> {
                   key: _formKey,
                   child: Column(
                     children: <Widget>[
-                      Image.asset(
-                        'gif/login3.gif',
+                      Lottie.network(
+                        'https://lottie.host/f3e03c0c-10b2-422c-8d3c-3c80ef89489b/QFy7qo8MXW.json',
                         height: 200,
                         fit: BoxFit.cover,
                       ),
@@ -371,21 +334,17 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-/// Custom Clipper for Header
 class HeaderClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
     Path path = Path();
-    // Starting point
     path.lineTo(0, size.height - 60);
-    // Single curve as in UserPage
     path.quadraticBezierTo(
       size.width / 4,
       size.height,
       size.width / 2,
       size.height - 40,
     );
-    // Continuing to the top-right
     path.lineTo(size.width, size.height - 120);
     path.lineTo(size.width, 0);
     path.close();

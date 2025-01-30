@@ -4,6 +4,7 @@ import 'reset_password_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
+import 'package:lottie/lottie.dart';
 
 class ForgotPasswordOTPPage extends StatefulWidget {
   final String email;
@@ -218,9 +219,11 @@ class _ForgotPasswordOTPPageState extends State<ForgotPasswordOTPPage> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       SizedBox(height: 20.0),
-                      Image.asset(
-                        'gif/otp.gif',
-                        height: 150,
+                      Lottie.network(
+                        // 'https://lottie.host/bb02c48b-83b6-435e-8dc1-ee22844aad6e/JQsEehMGzf.json',
+                        'https://lottie.host/00dabe13-18ac-4daf-a9f8-1806ee64e8fe/EcyHTBJ8y3.json',
+                        height: 200,
+                        fit: BoxFit.cover,
                       ),
                       SizedBox(height: 20.0),
                       Text(

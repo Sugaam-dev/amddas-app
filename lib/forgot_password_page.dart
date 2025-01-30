@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:lottie/lottie.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   @override
@@ -186,10 +187,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       // Display GIF before text fields
-                      Image.asset(
-                        'gif/forgot.gif', // Path to your GIF
-                        height: 250, // Adjust height as needed
-                        fit: BoxFit.cover, // Ensure it covers available space
+                      Lottie.network(
+                        'https://lottie.host/bb02c48b-83b6-435e-8dc1-ee22844aad6e/JQsEehMGzf.json',
+                        height: 200,
+                        fit: BoxFit.cover,
                       ),
                       SizedBox(
                           height: 20.0), // Space between GIF and text fields

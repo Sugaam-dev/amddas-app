@@ -1,6 +1,8 @@
+// home_page.dart
+
 import 'package:flutter/material.dart';
-import 'login_page.dart'; // Redirect for logout
-import 'reset_password_page.dart'; // Redirect for change password
+import 'package:flutter/services.dart';
+import 'appnavigator.dart'; // Import AppNavigator
 
 class HomePage extends StatefulWidget {
   @override
@@ -8,211 +10,267 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _selectedIndex = 0; // Track the selected tab (0 = Menu, 1 = Profile)
-  String _selectedCategory = 'Veg'; // Track the selected menu category
-  String _generatedToken = ''; // Store generated token
-
-  // Dummy menu items based on categories
-  final Map<String, List<Map<String, String>>> _menuItems = {
-    'Veg': [
-      {'name': 'Paneer Butter Masala', 'category': 'Veg'},
-      {'name': 'Aloo Gobi', 'category': 'Veg'},
-    ],
-    'Egg': [
-      {'name': 'Egg Curry', 'category': 'Egg'},
-      {'name': 'Egg Biryani', 'category': 'Egg'},
-    ],
-    'Non-Veg': [
-      {'name': 'Chicken Biryani', 'category': 'Non-Veg'},
-      {'name': 'Mutton Curry', 'category': 'Non-Veg'},
-    ],
-  };
-
-  // Simulate generating a token
-  void _generateToken() {
-    setState(() {
-      _generatedToken = 'TKN${DateTime.now().millisecondsSinceEpoch}';
-    });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Token generated: $_generatedToken'),
-    ));
-  }
-
-  // Handle tab changes (Menu/Profile)
-  void _onTabTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
-  // Show a confirmation dialog before deleting the account
-  void _confirmDeleteAccount() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete Account'),
-        content: Text(
-            'Are you sure you want to delete your account? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Account deletion in progress...'),
-              ));
-            },
-            child: Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Logout function
-  void _logout() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => LoginPage()),
-    );
-  }
-
-  // Build the Menu Tab
-  Widget _buildMenuTab() {
-    return Column(
-      children: [
-        // Drop-down menu to select category
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16.0),
-          child: DropdownButton<String>(
-            value: _selectedCategory,
-            items: [
-              DropdownMenuItem(value: 'Veg', child: Text('Veg')),
-              DropdownMenuItem(
-                  value: 'Egg',
-                  child: Text('Egg', style: TextStyle(color: Colors.orange))),
-              DropdownMenuItem(
-                  value: 'Non-Veg',
-                  child: Text('Non-Veg', style: TextStyle(color: Colors.red))),
+  // Back Button Handler
+  Future<bool> _onWillPop() async {
+    return await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Exit App!'),
+            content: Text('Do you want to exit the application?'),
+            actions: [
+              TextButton(
+                child: Text('No'),
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+              TextButton(
+                child: Text('Yes'),
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                  SystemNavigator.pop(); // Exit the app
+                },
+              ),
             ],
-            onChanged: (value) {
-              setState(() {
-                _selectedCategory = value!;
-              });
-            },
           ),
-        ),
+        ) ??
+        false;
+  }
 
-        // Display menu items based on selected category
-        Expanded(
-          child: ListView.builder(
-            itemCount: _menuItems[_selectedCategory]!.length,
-            itemBuilder: (context, index) {
-              return ListTile(
-                title: Text(_menuItems[_selectedCategory]![index]['name']!),
-                subtitle: Text(
-                    'Category: ${_menuItems[_selectedCategory]![index]['category']}'),
-              );
-            },
+  Widget _buildHomeCard({
+    required String title,
+    required IconData icon,
+    required VoidCallback onTap,
+    required Color startColor,
+    required Color endColor,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        height: 120,
+        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: [startColor, endColor],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 8,
+              offset: const Offset(2, 4),
+            ),
+          ],
         ),
-
-        // Generate Token Button
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton(
-            onPressed: _generateToken,
-            child: Text('Generate Token'),
-            style: ElevatedButton.styleFrom(
-              padding: EdgeInsets.symmetric(horizontal: 80, vertical: 15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+        child: Row(
+          children: [
+            const SizedBox(width: 20),
+            Icon(
+              icon,
+              size: 40,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 20),
+          ],
         ),
-
-        // Display generated token if any
-        if (_generatedToken.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16.0),
-            child: Text('Generated Token: $_generatedToken'),
-          ),
-      ],
-    );
-  }
-
-  // Build the Profile Tab
-  Widget _buildProfileTab() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // Change Password Button
-        ElevatedButton(
-          onPressed: () {
-            // Navigator.push(context,
-            //     MaterialPageRoute(builder: (context) => ResetPasswordPage()));
-          },
-          child: Text('Change Password'),
-          style: ElevatedButton.styleFrom(
-            padding: EdgeInsets.symmetric(horizontal: 60, vertical: 15),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        SizedBox(height: 20.0),
-
-        // Delete Account Button
-        ElevatedButton(
-          onPressed: _confirmDeleteAccount,
-          child: Text('Delete Account', style: TextStyle(color: Colors.white)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red, // Red button for delete action
-            padding: EdgeInsets.symmetric(horizontal: 60, vertical: 15),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        SizedBox(height: 20.0),
-
-        // Logout Button
-        ElevatedButton(
-          onPressed: _logout,
-          child: Text('Logout'),
-          style: ElevatedButton.styleFrom(
-            padding: EdgeInsets.symmetric(horizontal: 60, vertical: 15),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('AMDDAS Foods'),
-        centerTitle: true,
-      ),
-      body: _selectedIndex == 0
-          ? _buildMenuTab()
-          : _buildProfileTab(), // Switch between tabs
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onTabTapped,
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.menu), label: 'Menu'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-        ],
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('images/fodwal.jpg'),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            ClipPath(
+              clipper: HeaderClipper(),
+              child: Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color.fromARGB(255, 41, 110, 61),
+                      Color.fromARGB(255, 58, 190, 96)
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                      ),
+                      SizedBox(width: 50),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 60,
+              right: 20,
+              child: Container(
+                padding: EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      Color.fromARGB(255, 36, 163, 72),
+                      Color.fromARGB(255, 58, 190, 96)
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundImage: AssetImage('images/amd.png'),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(top: 20, bottom: 5),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 30, vertical: 30),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'HOME',
+                            style: TextStyle(
+                              fontSize: 34,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 60),
+                    _buildHomeCard(
+                      title: 'Token Booking',
+                      icon: Icons.calendar_today,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AppNavigator(initialIndex: 0),
+                          ),
+                        );
+                      },
+                      startColor: const Color.fromARGB(232, 85, 138, 0),
+                      endColor: const Color.fromARGB(218, 107, 194, 7),
+                    ),
+                    const SizedBox(height: 40),
+                    _buildHomeCard(
+                      title: 'Your Tokens',
+                      icon: Icons.confirmation_num_outlined,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AppNavigator(initialIndex: 1),
+                          ),
+                        );
+                      },
+                      startColor: const Color.fromARGB(232, 85, 138, 0),
+                      endColor: const Color.fromARGB(218, 107, 194, 7),
+                    ),
+                    const SizedBox(height: 40),
+                    _buildHomeCard(
+                      title: 'Manage Profile',
+                      icon: Icons.person_outline,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AppNavigator(initialIndex: 2),
+                          ),
+                        );
+                      },
+                      startColor: const Color.fromARGB(232, 85, 138, 0),
+                      endColor: const Color.fromARGB(218, 107, 194, 7),
+                    ),
+                    const SizedBox(height: 110),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 30),
+                      child: Text(
+                        'Fuel Your Workday with Love and Great Food ❤️',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 20,
+                          color: const Color.fromARGB(172, 0, 0, 0),
+                          fontWeight: FontWeight.w500,
+                          shadows: [
+                            Shadow(
+                              offset: Offset(1, 1),
+                              blurRadius: 2,
+                              color: Colors.black45,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class HeaderClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    Path path = Path();
+    path.lineTo(0, size.height - 60);
+    path.quadraticBezierTo(
+      size.width / 4,
+      size.height,
+      size.width / 2,
+      size.height - 40,
+    );
+    path.lineTo(size.width, size.height - 120);
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
